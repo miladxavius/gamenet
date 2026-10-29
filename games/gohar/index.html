@@ -18,7 +18,7 @@
   color-scheme:dark;
 }
 html,body{background:var(--cave);color:var(--ink)}
-body{font-family:var(--body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px 28px;overscroll-behavior:none;-webkit-user-select:none;user-select:none;position:relative}
+body{font-family:var(--body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px 28px;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;position:relative}
 #cave{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
 .app{position:relative;z-index:1;max-width:460px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
 header{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-top:14px}
@@ -43,12 +43,12 @@ header h1{font-family:var(--display);font-weight:400;font-size:36px;margin:0;lin
 .pc .cell.bomb{background:var(--tnt) center/118% 118% no-repeat;border-radius:0;animation:fizz .5s ease-in-out infinite alternate}
 @keyframes fizz{from{transform:rotate(-4deg)}to{transform:rotate(4deg)}}
 .tray{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;min-height:calc(var(--mini) * 5 + 16px);touch-action:none}
-.slot{display:grid;place-items:center;background:linear-gradient(rgba(255,220,170,.06),rgba(0,0,0,.35)),var(--stone,#2a211b);background-size:auto,200px;border-radius:16px;padding:6px;min-width:0;box-shadow:0 0 0 2px #6e543d,0 0 0 4px #2a1d14,inset 0 0 18px rgba(0,0,0,.85),0 8px 16px rgba(0,0,0,.6)}
+.slot{display:grid;place-items:center;touch-action:none;cursor:grab;background:linear-gradient(rgba(255,220,170,.06),rgba(0,0,0,.35)),var(--stone,#2a211b);background-size:auto,200px;border-radius:16px;padding:6px;min-width:0;box-shadow:0 0 0 2px #6e543d,0 0 0 4px #2a1d14,inset 0 0 18px rgba(0,0,0,.85),0 8px 16px rgba(0,0,0,.6)}
 .slot.nofit .pc{opacity:.3}
 .slot.lifting .pc{visibility:hidden}
 .pc{display:grid;gap:2px;touch-action:none;cursor:grab}
 .pc .cell{border-radius:4px}
-.ghost{position:fixed;left:0;top:0;z-index:50;pointer-events:none;gap:var(--gap);opacity:.95;filter:drop-shadow(0 10px 10px rgba(0,0,0,.6))}
+.ghost{position:fixed;left:0;top:0;z-index:50;pointer-events:none;gap:var(--gap);opacity:.95;will-change:transform}
 .ghost .cell{border-radius:5px}
 .over{position:absolute;inset:0;background:rgba(10,6,4,.86);border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:16px}
 .over h3{font:400 30px/1 var(--display);margin:0;color:var(--gold)}
@@ -65,7 +65,7 @@ dialog::backdrop{background:rgba(5,3,2,.78)}
 .torch{position:fixed;top:78vh;width:16px;height:64px;z-index:0;pointer-events:none;background:linear-gradient(90deg,#5a3a22,#8a5a34 45%,#3e2716);border-radius:4px 4px 6px 6px;box-shadow:0 0 0 2px #2a1a10}
 .torch.l{left:max(4px,env(safe-area-inset-left,0px));transform:rotate(12deg)}.torch.r{right:max(4px,env(safe-area-inset-right,0px));transform:rotate(-12deg)}
 .torch::before{content:"";position:absolute;left:-5px;right:-5px;top:-2px;height:12px;border-radius:3px;background:linear-gradient(#6f6a66,#3b3734)}
-.torch i{position:absolute;left:50%;bottom:100%;width:26px;height:40px;margin-left:-13px;border-radius:50% 50% 45% 45%/60% 60% 40% 40%;background:radial-gradient(circle at 50% 75%,#fff6c8 0 18%,#ffcf4a 34%,#ff7a1a 62%,rgba(255,80,20,0) 72%);filter:drop-shadow(0 0 14px rgba(255,140,40,.9));transform-origin:50% 90%;animation:flame .18s ease-in-out infinite alternate}
+.torch i{position:absolute;left:50%;bottom:100%;width:26px;height:40px;margin-left:-13px;border-radius:50% 50% 45% 45%/60% 60% 40% 40%;background:radial-gradient(circle at 50% 75%,#fff6c8 0 18%,#ffcf4a 34%,#ff7a1a 62%,rgba(255,80,20,0) 72%);box-shadow:0 0 22px 6px rgba(255,140,40,.45);will-change:transform;transform-origin:50% 90%;animation:flame .18s ease-in-out infinite alternate}
 @keyframes flame{from{transform:scale(1,1) rotate(-3deg)}to{transform:scale(.9,1.12) rotate(3deg)}}
 header h1{background:linear-gradient(180deg,#fff3b0 0%,#ffc94a 45%,#ff8a1f 100%);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:none;filter:drop-shadow(0 2px 0 #5a2a06) drop-shadow(0 0 14px rgba(255,150,40,.5))}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -228,7 +228,8 @@ function paintTNT(x){
   x.save();x.globalCompositeOperation='lighter';const g=x.createRadialGradient(.45,-.93,0,.45,-.93,.32);g.addColorStop(0,'rgba(255,255,220,1)');g.addColorStop(.3,'rgba(255,190,60,.8)');g.addColorStop(1,'rgba(255,110,20,0)');x.fillStyle=g;x.fillRect(.1,-1.3,.7,.7);x.restore();
   sparkle(x,.45,-.93,.2)}
 const cache={};
-function art(v){const k=v.crack?'r'+(v.v||0):'g'+v.col;if(!cache[k])cache[k]=canvasArt(x=>v.crack?paintRock(x,v.v||0):GEMART[v.col](x));return cache[k]}
+const artSheet=document.head.appendChild(document.createElement('style')).sheet;
+function art(v){const k=v.crack?'r'+(v.v||0):'g'+v.col;if(!cache[k]){cache[k]='a-'+k;artSheet.insertRule(`.a-${k}{--img:${canvasArt(x=>v.crack?paintRock(x,v.v||0):GEMART[v.col](x))}}`)}return cache[k]}
 document.documentElement.style.setProperty('--tnt',canvasArt(paintTNT));
 /* ---------- the cave: layered low-poly rock walls, stalactites, crystal clusters and two torches ---------- */
 function stoneTexture(){const c=document.createElement('canvas');c.width=c.height=200;const x=c.getContext('2d'),rand=rng(5);
@@ -268,21 +269,29 @@ function drawCave(){
 
 /* ---------- solver: can all these pieces be placed, in some order? ---------- */
 const flat=b=>{const f=new Uint8Array(N*N);for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(b[r][c])f[r*N+c]=1;return f};
-function fitsF(f,p,r0,c0){for(const [dr,dc] of p.cells){const r=r0+dr,c=c0+dc;if(r>=N||c>=N||f[r*N+c])return false}return true}
-function applyF(f,p,r0,c0){const g=f.slice();p.cells.forEach(([dr,dc])=>g[(r0+dr)*N+c0+dc]=1);
-  const rows=[],cols=[];for(let i=0;i<N;i++){let a=1,b=1;for(let j=0;j<N;j++){a&=g[i*N+j];b&=g[j*N+i]}if(a)rows.push(i);if(b)cols.push(i)}
+const SK=new WeakMap();
+function shapeOf(cells){let s=SK.get(cells);if(!s){let h=0,w=0;cells.forEach(([r,c])=>{h=Math.max(h,r+1);w=Math.max(w,c+1)});s={k:cells.map(([r,c])=>r*N+c),h,w};SK.set(cells,s)}return s}
+function fitsF(f,p,r0,c0){const s=shapeOf(p.cells);if(r0<0||c0<0||r0+s.h>N||c0+s.w>N)return false;const b=r0*N+c0;for(const k of s.k)if(f[b+k])return false;return true}
+// only the rows and columns the piece touches can fill up
+function applyF(f,p,r0,c0){const s=shapeOf(p.cells),g=f.slice(),b=r0*N+c0;for(const k of s.k)g[b+k]=1;
+  const rows=[],cols=[];for(let i=r0;i<r0+s.h;i++){let a=1;for(let j=0;j<N&&a;j++)a&=g[i*N+j];if(a)rows.push(i)}
+  for(let j=c0;j<c0+s.w;j++){let a=1;for(let i=0;i<N&&a;i++)a&=g[i*N+j];if(a)cols.push(j)}
   rows.forEach(r=>{for(let c=0;c<N;c++)g[r*N+c]=0});cols.forEach(c=>{for(let r=0;r<N;r++)g[r*N+c]=0});return g}
+// out of budget (nodes, or time on a slow phone): stop the whole search
+const spent=bud=>{if(++bud.n>bud.max||(bud.until&&(bud.n&127)===0&&performance.now()>bud.until)){bud.n=Infinity;return true}return false};
 const filled=f=>{let n=0;for(let i=0;i<N*N;i++)n+=f[i];return n};
 // finds an order and spots for all pieces whose final board passes goal; returns the moves or null
 function solve(f,pieces,goal=()=>true,bud={n:0,max:12000}){
   if(!pieces.length)return goal(f)?[]:null;
-  for(let i=0;i<pieces.length;i++){const p=pieces[i],rest=pieces.filter((_,j)=>j!==i);
-    if(p.bomb){for(let r=0;r<N;r++)for(let c=0;c<N;c++){if(++bud.n>bud.max)return null;
+  const seen=[];
+  for(let i=0;i<pieces.length;i++){const p=pieces[i],key=p.bomb?'b':p.cells;if(seen.includes(key))continue;seen.push(key);
+    const rest=pieces.filter((_,j)=>j!==i);
+    if(p.bomb){for(let r=0;r<N;r++)for(let c=0;c<N;c++){if(spent(bud))return null;
         const g=f.slice();for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){const rr=r+dr,cc=c+dc;if(rr>=0&&cc>=0&&rr<N&&cc<N)g[rr*N+cc]=0}
         const s=solve(g,rest,goal,bud);if(s){s.unshift({p,r,c});return s}}
       continue}
     for(let r=0;r<N;r++)for(let c=0;c<N;c++){if(!fitsF(f,p,r,c))continue;
-      if(++bud.n>bud.max)return null;
+      if(spent(bud))return null;
       const s=solve(applyF(f,p,r,c),rest,goal,bud);if(s){s.unshift({p,r,c});return s}}}
   return null}
 const solvable=(f,pieces)=>!!solve(f,pieces);
@@ -318,16 +327,16 @@ function clearingDeal(f){
     if(dfs())return out.map(cells=>({cells,col:rnd(kinds())}))}
   return null}
 function deal(){
-  const d=diff(),f=flat(G.board),goal=fairGoal(filled(f)),n0=filled(f);
+  const d=diff(),f=flat(G.board),goal=fairGoal(filled(f)),n0=filled(f),T0=performance.now(),B=(max,ms)=>({n:0,max,until:T0+ms});
   // early on, often hand out pieces that fit exactly into the gaps, so a good player can wipe the board clean
   G.stats=G.stats||{deals:0,tries:0,hits:0};G.stats.deals++;
   if(n0>0&&Math.random()<d.assist){G.stats.tries++;const t=clearingDeal(f);if(t)G.stats.hits++;if(t){G.sweep=true;while(t.length<3)t.push(randPiece(d,true));return shuffle(t)}
     // otherwise a set that lets the player pack the blocks into a few lines, ready for a clean sweep next time
-    for(let a=0;a<30;a++){const t2=[randPiece(d,a>15),randPiece(d,a>15),randPiece(d,a>15)];if(solve(f,t2,compact,{n:0,max:15000})){G.stats.compact=(G.stats.compact||0)+1;G.sweep=true;return t2}}}
-  const tries=[[30,false,goal],[20,true,goal],[20,false,null],[20,true,null]];
-  for(const [n,small,gl] of tries)for(let a=0;a<n;a++){
+    for(let a=0;a<30;a++){const t2=[randPiece(d,a>15),randPiece(d,a>15),randPiece(d,a>15)];if(performance.now()-T0>40)break;if(solve(f,t2,compact,B(15000,40))){G.stats.compact=(G.stats.compact||0)+1;G.sweep=true;return t2}}}
+  const tries=[[30,false,goal,90],[20,true,goal,110],[20,false,null,140],[20,true,null,170]];
+  for(const [n,small,gl,ms] of tries)for(let a=0;a<n&&performance.now()-T0<ms;a++){
     const t=[randPiece(d,small),randPiece(d,small),randPiece(d,small)];
-    if(solve(f,t,gl||undefined))return t}
+    if(solve(f,t,gl||undefined,B(12000,ms)))return t}
   return[0,1,2].map(()=>({cells:[[0,0]],col:rnd(kinds())}))}
 function canPlace(p,r0,c0){
   for(const [dr,dc] of p.cells){const r=r0+dr,c=c0+dc;
@@ -383,15 +392,18 @@ function place(ti,r0,c0){
   if(G.msgs.length){G.msg=G.msgs.join(' · ');G.msgAt=performance.now()}
   render(popped);buildTray();checkOver();
 }
-// a crack never takes the last gap of a row or column, and never blocks the pieces still in the tray
-function crackable(r,c){
-  if(G.board[r][c])return false;
-  const rowGaps=range(N).filter(j=>!G.board[r][j]).length,colGaps=range(N).filter(i=>!G.board[i][c]).length;
-  if(rowGaps<2||colGaps<2)return false;
-  const f=flat(G.board),left=G.tray.filter(Boolean);
-  if(G.goal&&solve(f,left,G.goal)){f[r*N+c]=1;return !!solve(f,left,G.goal)}
-  f[r*N+c]=1;return solvable(f,left)}
-function addCrack(opts){for(const [r,c] of shuffle(opts)){if(crackable(r,c)){G.board[r][c]={crack:true,v:rnd(ROCKS.length)};G.fresh.push([r,c]);return true}}return false}
+// a rock never takes the last gap of a row or column, and never blocks the pieces still in the tray
+function replay(f,path,goal){let g=f;for(const {p,r,c} of path){if(p.bomb){g=g.slice();for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){const rr=r+dr,cc=c+dc;if(rr>=0&&cc>=0&&rr<N&&cc<N)g[rr*N+cc]=0}}
+    else{if(!fitsF(g,p,r,c))return false;g=applyF(g,p,r,c)}}return !goal||goal(g)}
+function addCrack(opts){
+  const f=flat(G.board),left=G.tray.filter(Boolean),T=performance.now()+30;
+  let goal=G.goal,base=goal&&solve(f,left,goal,{n:0,max:12000,until:T});if(!base){goal=null;base=solve(f,left,undefined,{n:0,max:12000,until:T})}
+  if(!base)return false;let deep=4;
+  for(const [r,c] of shuffle(opts)){if(G.board[r][c])continue;
+    if(range(N).filter(j=>!G.board[r][j]).length<2||range(N).filter(i=>!G.board[i][c]).length<2)continue;
+    const g=f.slice();g[r*N+c]=1;
+    if(replay(g,base,goal)||(deep-->0&&solve(g,left,goal||undefined,{n:0,max:3000,until:T+20}))){G.board[r][c]={crack:true,v:rnd(ROCKS.length)};G.fresh.push([r,c]);return true}}
+  return false}
 function spreadCrack(){
   const opts=[];
   for(let r=0;r<N;r++)for(let c=0;c<N;c++){const v=G.board[r][c];if(!v||!v.crack)continue;
@@ -401,11 +413,11 @@ function seedCrack(){const e=[];for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(!G.bo
 
 function render(popped=[]){
   for(let r=0;r<N;r++)for(let c=0;c<N;c++){
-    const el=cellEl(r,c),v=G.board[r][c];let cls='cell';
-    if(v){cls+=v.crack?' crack':' blk';el.style.setProperty('--img',art(v))}
-    el.className=cls}
+    const el=cellEl(r,c),v=G.board[r][c];
+    const cls=v?(v.crack?'cell crack ':'cell blk ')+art(v):'cell';
+    if(el.className!==cls)el.className=cls}
   if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
-    popped.forEach(({r,c})=>cellEl(r,c).animate([{transform:'scale(1.25)',filter:'brightness(2.4)'},{transform:'scale(1)',filter:'none'}],{duration:380,easing:'ease-out'}));
+    popped.forEach(({r,c})=>cellEl(r,c).animate([{transform:'scale(1.3)',opacity:.15},{transform:'scale(1)',opacity:1}],{duration:340,easing:'ease-out'}));
     G.fresh.forEach(([r,c])=>cellEl(r,c).animate([{transform:'rotate(-8deg) scale(1.15)'},{transform:'rotate(6deg)'},{transform:'none'}],{duration:420}));
     if(G.big)boardEl.animate([{boxShadow:'0 0 0 0 #f2c230'},{boxShadow:'0 0 40px 10px #f2c230'},{boxShadow:'0 0 0 0 #f2c230'}],{duration:900})}
   G.fresh=[];G.big=false;
@@ -420,7 +432,7 @@ function pieceEl(p,size){
   el.style.gridTemplateColumns=`repeat(${w},var(--${size}))`;el.style.gridAutoRows=`var(--${size})`;
   const on=new Set(p.cells.map(([r,c])=>r*w+c));
   for(let i=0;i<h*w;i++){const d=div('cell');
-    if(!on.has(i))d.classList.add('void');else if(p.bomb)d.classList.add('bomb');else{d.classList.add('blk');d.style.setProperty('--img',art({col:p.col}))}
+    if(!on.has(i))d.classList.add('void');else if(p.bomb)d.classList.add('bomb');else d.className='cell blk '+art({col:p.col})
     el.append(d)}
   if(p.bomb&&size==='mini'){el.style.gridTemplateColumns='calc(var(--mini) * 1.6)';el.style.gridAutoRows='calc(var(--mini) * 1.6)'}
   return el}
@@ -428,7 +440,7 @@ function buildTray(){
   trayEl.innerHTML='';
   G.tray.forEach((p,i)=>{const s=div('slot');
     if(p){const pc=pieceEl(p,'mini');if(!fitsAnywhere(p))s.classList.add('nofit');
-      pc.addEventListener('pointerdown',e=>startDrag(e,i,s));s.append(pc)}
+      s.addEventListener('pointerdown',e=>startDrag(e,i,s));s.append(pc)}
     trayEl.append(s)})}
 function checkOver(){if(!G.tray.some(p=>p&&fitsAnywhere(p))){G.over=true;toHost('over',G.score);render()}}
 
@@ -446,24 +458,27 @@ function showPreview(){
   cols.forEach(c=>range(N).forEach(r=>mark(cellEl(r,c),'willclear')));
 }
 function startDrag(e,i,slot){
-  if(G.over||drag)return;e.preventDefault();
+  if(G.over||drag||!G.tray[i])return;e.preventDefault();
   const p=G.tray[i],ghost=pieceEl(p,'cell');ghost.classList.add('ghost');document.body.append(ghost);
-  drag={i,p,ghost,slot,pid:e.pointerId,touch:e.pointerType!=='mouse',target:null};slot.classList.add('lifting');
-  addEventListener('pointermove',moveDrag);addEventListener('pointerup',endDrag);addEventListener('pointercancel',endDrag);
-  moveDrag(e)}
+  const gr=ghost.getBoundingClientRect(),br=boardEl.getBoundingClientRect();
+  drag={i,p,ghost,slot,pid:e.pointerId,touch:e.pointerType!=='mouse',target:null,gw:gr.width,gh:gr.height,bx:br.left,by:br.top,ex:e.clientX,ey:e.clientY,raf:0};slot.classList.add('lifting');
+  addEventListener('pointermove',moveDrag,{passive:true});addEventListener('pointerup',endDrag);addEventListener('pointercancel',endDrag);
+  follow()}
 function moveDrag(e){
-  if(!drag||e.pointerId!==drag.pid)return;
-  const gr=drag.ghost.getBoundingClientRect();
-  const x=e.clientX-gr.width/2,y=e.clientY-gr.height-(drag.touch?44:14);
-  drag.ghost.style.transform=`translate(${x}px,${y}px)`;
-  const br=boardEl.getBoundingClientRect(),step=cellPx+gapPx;
-  const c0=Math.round((x-br.left-2-gapPx)/step),r0=Math.round((y-br.top-2-gapPx)/step);
+  if(!drag||e.pointerId!==drag.pid)return;drag.ex=e.clientX;drag.ey=e.clientY;
+  if(!drag.raf)drag.raf=requestAnimationFrame(follow)}
+function follow(){
+  if(!drag)return;drag.raf=0;
+  const x=drag.ex-drag.gw/2,y=drag.ey-drag.gh-(drag.touch?44:14);
+  drag.ghost.style.transform=`translate3d(${x}px,${y}px,0)`;
+  const step=cellPx+gapPx,c0=Math.round((x-drag.bx-2-gapPx)/step),r0=Math.round((y-drag.by-2-gapPx)/step);
   const t=canPlace(drag.p,r0,c0)?[r0,c0]:null;
   if(String(t)!==String(drag.target)){drag.target=t;showPreview()}}
 function endDrag(e){
   if(!drag||e.pointerId!==drag.pid)return;
   removeEventListener('pointermove',moveDrag);removeEventListener('pointerup',endDrag);removeEventListener('pointercancel',endDrag);
-  const d=drag;drag=null;d.ghost.remove();clearPreview();d.slot.classList.remove('lifting');
+  if(e.type==='pointerup'){drag.ex=e.clientX;drag.ey=e.clientY;follow()}
+  const d=drag;drag=null;cancelAnimationFrame(d.raf);d.ghost.remove();clearPreview();d.slot.classList.remove('lifting');
   if(d.target&&e.type==='pointerup')place(d.i,d.target[0],d.target[1])}
 
 function layout(){
@@ -489,11 +504,11 @@ $('again').onclick=newGame;$('restart').onclick=newGame;
 setInterval(()=>{if(G&&G.msg&&performance.now()-G.msgAt>3000)hud()},500);
 // slow embers drifting up through the torch light
 (function dust(){const c=$('dust'),x=c.getContext('2d');if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
-  const P=range(26).map(()=>({x:Math.random(),y:Math.random(),v:.00025+Math.random()*.0006,r:.6+Math.random()*1.6,p:Math.random()*6}));
-  (function f(){const W=c.width=innerWidth,H=c.height=innerHeight;x.clearRect(0,0,W,H);
-    P.forEach(d=>{d.y-=d.v;d.p+=.02;if(d.y<-.02){d.y=1.02;d.x=Math.random()}const a=.35+.35*Math.sin(d.p);
-      x.fillStyle=`rgba(255,${170+Math.round(60*a)},90,${a})`;x.beginPath();x.arc(d.x*W+Math.sin(d.p)*8,d.y*H,d.r,0,7);x.fill()});
-    requestAnimationFrame(f)})()})();
+  const fit=()=>{c.width=innerWidth;c.height=innerHeight};fit();addEventListener('resize',fit);let last=0;
+  const P=range(18).map(()=>({x:Math.random(),y:Math.random(),v:.00025+Math.random()*.0006,r:.6+Math.random()*1.6,p:Math.random()*6}));
+  (function f(t){requestAnimationFrame(f);if(t-last<32)return;last=t;const W=c.width,H=c.height;x.clearRect(0,0,W,H);
+    P.forEach(d=>{d.y-=d.v*2;d.p+=.04;if(d.y<-.02){d.y=1.02;d.x=Math.random()}const a=.35+.35*Math.sin(d.p);
+      x.fillStyle=`rgba(255,${170+Math.round(60*a)},90,${a})`;x.beginPath();x.arc(d.x*W+Math.sin(d.p)*8,d.y*H,d.r,0,7);x.fill()})})(0)})();
 drawCave();addEventListener('resize',()=>{clearTimeout(drawCave.t);drawCave.t=setTimeout(drawCave,200)});
 newGame();
 })();
