@@ -159,6 +159,7 @@
   #play .bar .who { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
   #stage { flex: 1; min-height: 0; display: grid; place-items: center; padding-bottom: env(safe-area-inset-bottom, 0px); }
   #stage canvas { display: block; touch-action: none; border-radius: 12px; }
+  #stage .game-frame { justify-self: stretch; align-self: stretch; width: 100%; height: 100%; border: 0; display: block; background: #0b0807; }
   body.playing { overflow: hidden; }
   [hidden] { display: none !important; }
 </style>
@@ -225,6 +226,7 @@
 <script src="js/minaret.js"></script>
 <script src="js/firefly.js"></script>
 <script src="js/thumb.js"></script>
+<script src="js/gohar.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
