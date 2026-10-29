@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>html,body{margin:0;height:100%}body{font-size:14px}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>گوهر خیراندیش</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lalezar&family=Nunito:wght@400;600;800&display=swap">
+<style>
+/* Layout: a torch-lit cave. Persian title carved at the top, score line, a stone slab board, a ledge of 3 pieces. Guide lives in a dialog. */
+:root{
+  --cave:#0b0807; --panel:rgba(34,26,20,.88); --line:#5a4636; --ink:#f6ead6; --mute:#bca78b; --soft:#e2d2b8;
+  --gold:#ffbf4d; --ember:#ff8a2a; --tq:#35c7c1;
+  --display:"Lalezar","Nunito",system-ui,sans-serif; --body:"Nunito",system-ui,sans-serif;
+  --cell:40px; --gap:3px; --mini:20px;
+  color-scheme:dark;
+}
+html,body{background:var(--cave);color:var(--ink)}
+body{font-family:var(--body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px 28px;overscroll-behavior:none;-webkit-user-select:none;user-select:none;position:relative}
+#cave{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.app{position:relative;z-index:1;max-width:460px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+header{display:flex;justify-content:space-between;align-items:center;gap:10px;padding-top:14px}
+header h1{font-family:var(--display);font-weight:400;font-size:36px;margin:0;line-height:1.1;color:var(--gold);text-shadow:0 2px 0 #6b3a0c,0 0 18px rgba(255,150,40,.55)}
+.tools{display:flex;gap:8px;align-items:center}
+.tools .best{margin-right:6px}
+.icon{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:radial-gradient(circle at 35% 30%,#4a3a2e,#211913);color:var(--ink);font:400 20px/1 var(--display);cursor:pointer;display:grid;place-items:center;box-shadow:0 3px 8px rgba(0,0,0,.6)}
+.hud{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:var(--mute)}
+.score{font:400 30px/1 var(--display);color:var(--ink);font-variant-numeric:tabular-nums;text-shadow:0 0 12px rgba(255,170,60,.35)}
+.score small,.best small{font:800 11px var(--body);color:var(--mute);letter-spacing:.08em;margin-right:6px}
+.best{font:400 19px/1 var(--display);color:var(--gold);font-variant-numeric:tabular-nums}
+.msg{min-height:20px;font-size:14px;color:var(--gold);text-align:center;font-weight:800;transition:opacity .4s;text-shadow:0 1px 6px #000}
+.boardwrap{position:relative;align-self:center}
+.board{display:grid;grid-template-columns:repeat(8,var(--cell));grid-auto-rows:var(--cell);gap:var(--gap);padding:calc(var(--gap) + 5px);background:linear-gradient(rgba(20,12,8,.35),rgba(10,6,4,.6)),var(--stone,#2a211b);background-size:auto,200px;border-radius:18px;touch-action:none;box-shadow:0 0 0 3px #8a6a4c,0 0 0 6px #4a3626,0 0 0 8px #1a120c,0 18px 40px rgba(0,0,0,.85),inset 0 0 28px rgba(0,0,0,.9),inset 0 3px 0 rgba(255,220,170,.18)}
+.cell{border-radius:9px;background:linear-gradient(rgba(0,0,0,.55),rgba(30,20,14,.45));box-shadow:inset 0 3px 7px rgba(0,0,0,.95),inset 0 -2px 0 rgba(255,210,150,.1);position:relative;overflow:visible}
+.board .cell.blk,.board .cell.crack,.pc .cell{box-shadow:none}
+.board .cell.blk,.board .cell.crack,.pc .cell.blk{background:var(--img) center/118% 118% no-repeat}
+.pc .cell.void{background:transparent}
+.cell.preview{box-shadow:inset 0 0 0 3px var(--pk);background-color:rgba(255,220,160,.12)}
+.cell.willclear::after{content:"";position:absolute;inset:0;border-radius:8px;box-shadow:inset 0 0 0 2px rgba(255,235,190,.95),0 0 10px rgba(255,190,90,.6);background:rgba(255,210,140,.14)}
+.cell.blast::after{content:"";position:absolute;inset:0;border-radius:8px;box-shadow:inset 0 0 0 2px #ff7a1a;background:rgba(255,110,30,.3)}
+.pc .cell.bomb{background:var(--tnt) center/118% 118% no-repeat;border-radius:0;animation:fizz .5s ease-in-out infinite alternate}
+@keyframes fizz{from{transform:rotate(-4deg)}to{transform:rotate(4deg)}}
+.tray{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;min-height:calc(var(--mini) * 5 + 16px);touch-action:none}
+.slot{display:grid;place-items:center;background:linear-gradient(rgba(255,220,170,.06),rgba(0,0,0,.35)),var(--stone,#2a211b);background-size:auto,200px;border-radius:16px;padding:6px;min-width:0;box-shadow:0 0 0 2px #6e543d,0 0 0 4px #2a1d14,inset 0 0 18px rgba(0,0,0,.85),0 8px 16px rgba(0,0,0,.6)}
+.slot.nofit .pc{opacity:.3}
+.slot.lifting .pc{visibility:hidden}
+.pc{display:grid;gap:2px;touch-action:none;cursor:grab}
+.pc .cell{border-radius:4px}
+.ghost{position:fixed;left:0;top:0;z-index:50;pointer-events:none;gap:var(--gap);opacity:.95;filter:drop-shadow(0 10px 10px rgba(0,0,0,.6))}
+.ghost .cell{border-radius:5px}
+.over{position:absolute;inset:0;background:rgba(10,6,4,.86);border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:16px}
+.over h3{font:400 30px/1 var(--display);margin:0;color:var(--gold)}
+.over p{margin:0;color:var(--soft)}
+.btn{font:800 14px var(--body);background:linear-gradient(#ffcf6a,#e98a1f);color:#2a1500;border:0;border-radius:10px;padding:10px 18px;cursor:pointer;box-shadow:0 3px 0 #8a4a0c}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+dialog{background:#221a14;color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:0;width:min(440px,calc(100% - 32px));max-height:86vh}
+dialog::backdrop{background:rgba(5,3,2,.78)}
+.dlg{padding:16px;display:flex;flex-direction:column;gap:10px;overflow:auto;max-height:86vh;box-sizing:border-box}
+.dlg h2{font:400 26px/1 var(--display);margin:0;color:var(--gold);display:flex;justify-content:space-between;align-items:center}
+.dlg ul{margin:0;padding-left:18px;color:var(--soft);font-size:13.5px;line-height:1.45;display:flex;flex-direction:column;gap:4px}
+.dlg p{margin:0;color:var(--soft);font-size:13.5px;line-height:1.45}
+#dust{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.torch{position:fixed;top:78vh;width:16px;height:64px;z-index:0;pointer-events:none;background:linear-gradient(90deg,#5a3a22,#8a5a34 45%,#3e2716);border-radius:4px 4px 6px 6px;box-shadow:0 0 0 2px #2a1a10}
+.torch.l{left:max(4px,env(safe-area-inset-left,0px));transform:rotate(12deg)}.torch.r{right:max(4px,env(safe-area-inset-right,0px));transform:rotate(-12deg)}
+.torch::before{content:"";position:absolute;left:-5px;right:-5px;top:-2px;height:12px;border-radius:3px;background:linear-gradient(#6f6a66,#3b3734)}
+.torch i{position:absolute;left:50%;bottom:100%;width:26px;height:40px;margin-left:-13px;border-radius:50% 50% 45% 45%/60% 60% 40% 40%;background:radial-gradient(circle at 50% 75%,#fff6c8 0 18%,#ffcf4a 34%,#ff7a1a 62%,rgba(255,80,20,0) 72%);filter:drop-shadow(0 0 14px rgba(255,140,40,.9));transform-origin:50% 90%;animation:flame .18s ease-in-out infinite alternate}
+@keyframes flame{from{transform:scale(1,1) rotate(-3deg)}to{transform:scale(.9,1.12) rotate(3deg)}}
+header h1{background:linear-gradient(180deg,#fff3b0 0%,#ffc94a 45%,#ff8a1f 100%);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:none;filter:drop-shadow(0 2px 0 #5a2a06) drop-shadow(0 0 14px rgba(255,150,40,.5))}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+</head>
+<body>
+<canvas id="cave" aria-hidden="true"></canvas>
+<div class="torch l" aria-hidden="true"><i></i></div><div class="torch r" aria-hidden="true"><i></i></div>
+<canvas id="dust" aria-hidden="true"></canvas>
+<div class="app" id="app">
+  <header>
+    <div class="score"><small>SCORE</small><span id="score">0</span></div>
+    <div class="tools">
+      <div class="best"><small>BEST</small><span id="best">0</span></div>
+      <button class="icon" id="restart" type="button" aria-label="Restart">↻</button>
+      <button class="icon" id="infoBtn" type="button" aria-label="How to play">i</button>
+    </div>
+  </header>
+  <div class="boardwrap">
+    <div class="board" id="board"></div>
+    <div class="over" id="over" hidden>
+      <h3>No room left</h3>
+      <p id="otext"></p>
+      <button class="btn" id="again" type="button">Play again</button>
+    </div>
+  </div>
+  <div class="msg" id="msg"></div>
+  <div class="tray" id="tray"></div>
+</div>
+
+<dialog id="info">
+  <div class="dlg">
+    <h2>How to play <button class="icon" id="closeInfo" type="button" aria-label="Close">×</button></h2>
+    <ul>
+      <li>Drag gems onto the board. Fill a whole row or column to clear it.</li>
+      <li>You start with one kind of gem. Clear the whole board to unlock a new kind, up to seven.</li>
+      <li>Rocks grow on the board by themselves. Clear a line through a rock to break it.</li>
+      <li>Clear a line of gems that are all the same kind to get a TNT. Drop it anywhere to blast a 3×3 area.</li>
+      <li>Rocks show up after your first board clear, and the game slowly gets harder. It ends when nothing fits.</li>
+    </ul>
+    <p>Big bonuses for breaking every rock on the board, and for clearing the whole board.</p>
+  </div>
+</dialog>
+
+<script>
+(function(){
+const N=8;
+// ruby, citrine, sapphire, emerald, diamond, amethyst, aquamarine
+const COLORS=['#e1182f','#ff9f0a','#1840b8','#147a46','#b4dcfa','#c03ee0','#2fb7ee'];
+const NAMES=['rubies','citrines','sapphires','emeralds','diamonds','amethysts','aquamarines'];
+// early game uses fewer kinds of gem, so same-kind lines are easier; one more kind every 1000 points
+// start with one kind of gem; every whole-board clear unlocks the next kind
+const kinds=()=>Math.min(COLORS.length,1+G.stage);
+const SHAPES=[
+  [[0,0]],[[0,0],[0,1]],[[0,0],[1,0]],[[0,0],[0,1],[0,2]],[[0,0],[1,0],[2,0]],
+  [[0,0],[0,1],[0,2],[0,3]],[[0,0],[1,0],[2,0],[3,0]],[[0,0],[0,1],[0,2],[0,3],[0,4]],[[0,0],[1,0],[2,0],[3,0],[4,0]],
+  [[0,0],[0,1],[1,0],[1,1]],[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]],
+  [[0,0],[1,0],[1,1]],[[0,0],[0,1],[1,0]],[[0,0],[0,1],[1,1]],[[0,1],[1,0],[1,1]],
+  [[0,0],[1,0],[2,0],[2,1]],[[0,1],[1,1],[2,1],[2,0]],[[0,0],[0,1],[0,2],[1,0]],[[0,0],[0,1],[0,2],[1,2]],
+  [[0,0],[0,1],[0,2],[1,1]],[[0,1],[1,0],[1,1],[1,2]],[[0,1],[0,2],[1,0],[1,1]],[[0,0],[0,1],[1,1],[1,2]]
+];
+const SMALL=SHAPES.filter(s=>s.length<=3),MED=SHAPES.filter(s=>s.length===4),BIG=SHAPES.filter(s=>s.length>=5);
+const DIRS=[[1,0],[0,-1],[-1,0],[0,1]];
+const SCORE={block:1,line:10,heal:5,mono:50,blast:3,allHealed:100,boardClear:300};
+// difficulty goes up one step every 1000 points
+// difficulty grows slowly: one step per board clear, plus one step per 5000 points.
+// Step 0 has no rocks and mostly small pieces, like a warm-up.
+function diff(){const t=G.stage+Math.floor(G.score/5000);
+  return{t,spread:t<1?Infinity:t<10?Math.max(2,9-t):1,seed:t<1?Infinity:Math.max(4,18-2*t),
+    small:Math.max(2,6-.5*t),med:3,big:.3+.45*t,assist:t<6?1-.15*t:.1}}
+const rnd=n=>Math.floor(Math.random()*n), pick=a=>a[rnd(a.length)];
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]]}return a};
+const grid=()=>Array.from({length:N},()=>Array(N).fill(null));
+const range=n=>Array.from({length:n},(_,i)=>i);
+const $=id=>document.getElementById(id);
+const div=c=>{const d=document.createElement('div');d.className=c;return d};
+function dims(cells){let h=0,w=0;cells.forEach(([r,c])=>{h=Math.max(h,r+1);w=Math.max(w,c+1)});return{h,w}}
+
+/* ---------- art: flat faceted gems, low-poly rocks and TNT, painted once on a canvas ---------- */
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const hsl=(h,s,l,a=1)=>`hsla(${h},${s}%,${Math.max(0,Math.min(100,l))}%,${a})`;
+const ART=192;
+function canvasArt(paint){const c=document.createElement('canvas');c.width=c.height=ART;const x=c.getContext('2d');x.translate(ART/2,ART/2);x.scale(ART/2.3,ART/2.3);x.lineJoin='round';paint(x);return `url(${c.toDataURL('image/png')})`}
+function tri(x,pts,fill){x.beginPath();pts.forEach(([a,b],i)=>i?x.lineTo(a,b):x.moveTo(a,b));x.closePath();x.fillStyle=fill;x.fill();x.strokeStyle=fill;x.lineWidth=.012;x.stroke()}
+function sparkle(x,px,py,s,a=1){x.save();x.translate(px,py);x.fillStyle=`rgba(255,255,255,${a})`;x.beginPath();
+  for(let i=0;i<8;i++){const ang=i*Math.PI/4,r=i%2?s*.22:s;x.lineTo(Math.cos(ang)*r,Math.sin(ang)*r)}x.closePath();x.fill();x.restore()}
+function softShadow(x,y,w){x.save();x.translate(0,y);x.scale(1,.22);const g=x.createRadialGradient(0,0,0,0,0,w);g.addColorStop(0,'rgba(0,0,0,.55)');g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.beginPath();x.arc(0,0,w,0,7);x.fill();x.restore()}
+const ringN=(n,r,rot=0,sx=1,sy=1)=>range(n).map(i=>{const a=rot+i*2*Math.PI/n;return[Math.cos(a)*r*sx,Math.sin(a)*r*sy]});
+// one cut gem seen from above: an outline, a smaller table in the middle, triangle facets between them
+function paintGem(x,O,[h,s,l],o={}){
+  const ts=o.table||.5,cy=o.tcy||0,Tb=O.map(([a,b])=>[a*ts,b*ts+cy]),n=O.length,rand=rng(o.seed||1);
+  softShadow(x,1.02,.8);
+  for(let i=0;i<n;i++){const j=(i+1)%n,M=[(O[i][0]+O[j][0])/2,(O[i][1]+O[j][1])/2];
+    [[O[i],M,Tb[i]],[M,Tb[j],Tb[i]],[M,O[j],Tb[j]]].forEach((t,k)=>{
+      const mx=(t[0][0]+t[1][0]+t[2][0])/3,my=(t[0][1]+t[1][1]+t[2][1])/3,lit=Math.cos(Math.atan2(my,mx)+3*Math.PI/4);
+      tri(x,t,hsl(h,s,l+lit*13+(k===1?7:k===0?-3:2)+(rand()-.5)*7))})}
+  // the table with its two light stripes
+  x.save();x.beginPath();Tb.forEach(([a,b],i)=>i?x.lineTo(a,b):x.moveTo(a,b));x.closePath();x.fillStyle=hsl(h,s-5,l+11);x.fill();x.clip();
+  x.rotate(-1.05);x.fillStyle=hsl(h,s-15,l+30,.85);x.fillRect(-.07,-2,.13,4);x.fillRect(.16,-2,.07,4);x.fillRect(-.3,-2,.05,4);x.restore();
+  x.beginPath();Tb.forEach(([a,b],i)=>i?x.lineTo(a,b):x.moveTo(a,b));x.closePath();x.strokeStyle=hsl(h,s,l+24,.7);x.lineWidth=.025;x.stroke();
+  x.beginPath();O.forEach(([a,b],i)=>i?x.lineTo(a,b):x.moveTo(a,b));x.closePath();x.strokeStyle=hsl(h,s,l-16,.9);x.lineWidth=.03;x.stroke();
+  (o.sparks||[[-.5,-.45,.16],[.55,.05,.11],[-.25,.6,.09]]).forEach(([a,b,r])=>sparkle(x,a,b,r))}
+function paintDiamond(x,[h,s,l]){
+  softShadow(x,1.02,.85);
+  const T=-.5,G=-.08,A=.86,top=[-.52,-.17,.17,.52],gir=[-.95,-.62,-.3,0,.3,.62,.95];
+  // crown
+  const crown=[[[-.95,G],[-.52,T],[-.62,G]],[[-.52,T],[-.17,T],[-.3,G]],[[-.52,T],[-.3,G],[-.62,G]],[[-.17,T],[0,G],[-.3,G]],[[-.17,T],[.17,T],[0,G]],[[.17,T],[.3,G],[0,G]],[[.17,T],[.52,T],[.3,G]],[[.52,T],[.62,G],[.3,G]],[[.52,T],[.95,G],[.62,G]]];
+  const cl=[6,14,4,10,18,6,12,2,-6];crown.forEach((t,i)=>tri(x,t,hsl(h,s,l+cl[i])));
+  const pl=[8,-4,4,-10,-2,-14];for(let i=0;i<6;i++)tri(x,[[gir[i],G],[gir[i+1],G],[0,A]],hsl(h,s,l-6+pl[i]));
+  x.beginPath();x.moveTo(-.95,G);x.lineTo(-.52,T);x.lineTo(.52,T);x.lineTo(.95,G);x.lineTo(0,A);x.closePath();x.strokeStyle=hsl(h,s,l-22,.9);x.lineWidth=.03;x.stroke();
+  sparkle(x,-.55,-.62,.17);sparkle(x,.45,.15,.12);sparkle(x,-.2,.35,.08)}
+// ruby, citrine, sapphire, emerald, diamond, amethyst, aquamarine
+const GEMART=[
+  x=>paintGem(x,ringN(6,.94,-Math.PI/2,.9,1),[354,86,46],{seed:1}),                                     // ruby: tall hexagon
+  x=>paintGem(x,ringN(16,.9),[34,100,52],{seed:2,table:.46}),                                            // citrine: round
+  x=>paintGem(x,ringN(8,.95,Math.PI/8),[226,82,38],{seed:3}),                                            // sapphire: octagon
+  x=>paintGem(x,[[-.42,-.92],[.42,-.92],[.62,-.72],[.62,.72],[.42,.92],[-.42,.92],[-.62,.72],[-.62,-.72]],[150,68,27],{seed:4,table:.52}), // emerald: step cut
+  x=>paintDiamond(x,[205,90,80]),                                                                        // diamond: side view
+  x=>paintGem(x,[[-.62,-.85],[.62,-.85],[.8,-.25],[.42,.88],[-.42,.88],[-.8,-.25]],[287,72,55],{seed:6,table:.48,tcy:-.06}), // amethyst: tapered
+  x=>{const O=[[0,-.98]];for(let i=0;i<=12;i++){const a=-Math.PI/6+i*(Math.PI*4/3)/12;O.push([Math.cos(a)*.6,.28+Math.sin(a)*.6])}O.pop();
+      paintGem(x,O,[197,88,56],{seed:7,table:.45,tcy:.12,sparks:[[-.3,-.2,.14],[.35,.35,.1],[-.15,.7,.07]]})}       // aquamarine: teardrop
+];
+// rocks: low-poly stones, each kind with its own colour and detail
+const ROCKS=[{h:30,s:6,l:46,seed:3,crack:1},{h:28,s:22,l:38,seed:11,moss:1},{h:38,s:35,l:52,seed:29,pebble:1},{h:215,s:12,l:42,seed:41,moss:1,crack:1},{h:260,s:8,l:24,seed:57,shards:1}];
+function paintRock(x,v){
+  const R=ROCKS[v],rand=rng(R.seed),n=14;softShadow(x,.98,.85);
+  const O=range(n).map(i=>{const a=i*2*Math.PI/n+(rand()-.5)*.12,r=.82+rand()*.08;return[Math.cos(a)*r*(1+.06*Math.cos(R.seed)),Math.sin(a)*r*.84+.06]});
+  // smooth pebble outline: curves through the midpoints of the corner points
+  const smooth=()=>{x.beginPath();const m=i=>[(O[i][0]+O[(i+1)%n][0])/2,(O[i][1]+O[(i+1)%n][1])/2];x.moveTo(...m(n-1));for(let i=0;i<n;i++)x.quadraticCurveTo(O[i][0],O[i][1],...m(i));x.closePath()};
+  x.save();smooth();x.clip();
+  const P=[-.18+rand()*.12,-.22+rand()*.1];
+  // rounded body: soft light from the top left, a few broad planes, and speckles
+  const body=x.createRadialGradient(P[0]-.15,P[1]-.2,.05,0,.1,1.05);body.addColorStop(0,hsl(R.h,R.s,R.l+18));body.addColorStop(.55,hsl(R.h,R.s,R.l));body.addColorStop(1,hsl(R.h,R.s,R.l-20));
+  x.fillStyle=body;x.fillRect(-1.1,-1.1,2.2,2.2);
+  for(let k=0;k<5;k++){const a0=k*2*Math.PI/5+rand()*.4,a1=a0+1.0+rand()*.3,lit=Math.cos((a0+a1)/2+3*Math.PI/4);
+    x.fillStyle=lit>0?`rgba(255,255,255,${.05+lit*.07})`:`rgba(0,0,0,${.06-lit*.1})`;x.beginPath();x.moveTo(P[0]*.6,P[1]*.6);x.lineTo(Math.cos(a0)*1.2,Math.sin(a0)*1.2);x.lineTo(Math.cos(a1)*1.2,Math.sin(a1)*1.2);x.closePath();x.fill()}
+  for(let k=0;k<26;k++){x.fillStyle=rand()<.5?hsl(R.h,R.s,R.l-16,.5):hsl(R.h,R.s,R.l+16,.4);x.beginPath();x.arc((rand()-.5)*1.5,(rand()-.5)*1.3+.05,.015+rand()*.03,0,7);x.fill()}
+  const rim=x.createLinearGradient(0,-.8,0,.9);rim.addColorStop(0,'rgba(0,0,0,0)');rim.addColorStop(1,'rgba(0,0,0,.35)');x.fillStyle=rim;x.fillRect(-1.1,-1.1,2.2,2.2);
+  x.restore();smooth();x.strokeStyle=hsl(R.h,R.s,R.l-24,.9);x.lineWidth=.035;x.stroke();
+  if(R.crack){x.strokeStyle=hsl(R.h,R.s,R.l-28);x.lineWidth=.045;x.lineCap='round';x.beginPath();x.moveTo(P[0]+.05,P[1]);x.lineTo(P[0]+.2,P[1]+.28);x.lineTo(P[0]+.08,P[1]+.55);x.moveTo(P[0]+.2,P[1]+.28);x.lineTo(P[0]+.46,P[1]+.22);x.stroke()}
+  if(R.moss){[[-.35,-.42,.32],[.12,-.52,.24],[.42,-.3,.2]].forEach(([a,b,r],k)=>{x.fillStyle=hsl(100,45,k%2?30:36);x.beginPath();x.ellipse(a,b,r,r*.45,(rand()-.5)*.6,0,7);x.fill()});
+    x.fillStyle=hsl(100,50,46);x.beginPath();x.ellipse(-.38,-.47,.14,.05,0,0,7);x.fill()}
+  if(R.pebble){x.fillStyle=hsl(R.h,R.s,R.l-6);x.beginPath();x.ellipse(.62,.62,.2,.14,0,0,7);x.fill();x.fillStyle=hsl(R.h,R.s,R.l+12);x.beginPath();x.ellipse(.57,.57,.09,.05,0,0,7);x.fill();
+    x.strokeStyle=hsl(R.h,R.s,R.l-14,.6);x.lineWidth=.03;[-.3,0,.25].forEach(b=>{x.beginPath();x.moveTo(-.6,b+.1);x.quadraticCurveTo(0,b-.05,.6,b+.12);x.stroke()})}
+  if(R.shards)[[-.25,-.25,0],[.08,-.38,.35],[.32,-.15,.7]].forEach(([a,b,r])=>{x.save();x.translate(a,b);x.rotate(r-.35);
+    tri(x,[[-.08,.12],[0,-.32],[.08,.12]],hsl(190,95,62));tri(x,[[0,-.32],[.08,.12],[.03,.12]],hsl(190,95,48));x.restore();
+    x.save();x.globalCompositeOperation='lighter';const g=x.createRadialGradient(a,b,0,a,b,.3);g.addColorStop(0,'rgba(80,220,255,.35)');g.addColorStop(1,'rgba(80,220,255,0)');x.fillStyle=g;x.fillRect(a-.3,b-.3,.6,.6);x.restore()});
+  x.fillStyle='rgba(255,255,255,.18)';x.beginPath();x.ellipse(P[0]-.12,P[1]-.08,.2,.07,-.5,0,7);x.fill()}
+function paintTNT(x){
+  softShadow(x,1.02,.85);
+  [[-.42,0],[.42,0],[0,.04]].forEach(([cx,dy],i)=>{const w=.36,top=-.68+dy,bot=.86+dy;
+    const g=x.createLinearGradient(cx-w/2,0,cx+w/2,0);g.addColorStop(0,'#ff6b5e');g.addColorStop(.3,'#e3262b');g.addColorStop(1,'#8f0f14');
+    x.fillStyle=g;x.beginPath();x.roundRect?x.roundRect(cx-w/2,top,w,bot-top,.06):x.rect(cx-w/2,top,w,bot-top);x.fill();
+    x.fillStyle='#f4a08f';x.beginPath();x.ellipse(cx,top,w/2,.07,0,0,7);x.fill();x.fillStyle='#b8542c';x.beginPath();x.ellipse(cx,top,w/2*.55,.035,0,0,7);x.fill();
+    x.fillStyle='rgba(255,255,255,.28)';x.fillRect(cx-w/2+.05,top+.08,.05,bot-top-.2)});
+  x.fillStyle='#f6e7c3';x.fillRect(-.68,.02,1.36,.36);x.strokeStyle='#7a2e12';x.lineWidth=.035;x.strokeRect(-.66,.04,1.32,.32);
+  x.save();x.scale(.01,.01);x.fillStyle='#1d0e08';x.font='900 29px Arial Black, Arial, sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText('TNT',0,22);x.restore();
+  x.strokeStyle='#4a3424';x.lineWidth=.05;x.lineCap='round';x.beginPath();x.moveTo(0,-.62);x.quadraticCurveTo(.05,-.95,.42,-.92);x.stroke();
+  x.save();x.globalCompositeOperation='lighter';const g=x.createRadialGradient(.45,-.93,0,.45,-.93,.32);g.addColorStop(0,'rgba(255,255,220,1)');g.addColorStop(.3,'rgba(255,190,60,.8)');g.addColorStop(1,'rgba(255,110,20,0)');x.fillStyle=g;x.fillRect(.1,-1.3,.7,.7);x.restore();
+  sparkle(x,.45,-.93,.2)}
+const cache={};
+function art(v){const k=v.crack?'r'+(v.v||0):'g'+v.col;if(!cache[k])cache[k]=canvasArt(x=>v.crack?paintRock(x,v.v||0):GEMART[v.col](x));return cache[k]}
+document.documentElement.style.setProperty('--tnt',canvasArt(paintTNT));
+/* ---------- the cave: layered low-poly rock walls, stalactites, crystal clusters and two torches ---------- */
+function stoneTexture(){const c=document.createElement('canvas');c.width=c.height=200;const x=c.getContext('2d'),rand=rng(5);
+  x.fillStyle='#2f241d';x.fillRect(0,0,200,200);
+  for(let i=0;i<70;i++){const cx=rand()*200,cy=rand()*200,r=10+rand()*26;x.fillStyle=`hsl(25,${12+rand()*10}%,${14+rand()*10}%)`;x.beginPath();for(let k=0;k<6;k++){const a=k*Math.PI/3+rand()*.5;x.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r*.8)}x.closePath();x.fill()}
+  x.fillStyle='rgba(0,0,0,.25)';x.fillRect(0,0,200,200);return `url(${c.toDataURL()})`}
+document.documentElement.style.setProperty('--stone',stoneTexture());
+function drawCave(){
+  const c=$('cave'),dpr=Math.min(2,devicePixelRatio||1),W=innerWidth,H=innerHeight;c.width=W*dpr;c.height=H*dpr;
+  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);const rand=rng(7);
+  let g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#24161c');g.addColorStop(.55,'#160e14');g.addColorStop(1,'#0b070a');x.fillStyle=g;x.fillRect(0,0,W,H);
+  // far wall: big faint facets
+  for(let i=0;i<46;i++){const cx=rand()*W,cy=rand()*H,r=40+rand()*90;x.fillStyle=`hsla(${280+rand()*40},18%,${9+rand()*7}%,.55)`;x.beginPath();x.moveTo(cx,cy-r);x.lineTo(cx+r*(.6+rand()*.5),cy+r*.4);x.lineTo(cx-r*(.6+rand()*.5),cy+r*.5);x.closePath();x.fill()}
+  // side walls in three layers, lighter toward the front
+  const wall=(side,depth)=>{const pts=[];const base=side<0?0:W;const reach=W*(.1+.07*depth);
+    for(let y=-20;y<=H+40;y+=36+rand()*30)pts.push([base-side*(reach*(.45+rand()*.7)),y]);
+    for(let k=0;k+1<pts.length;k++){const [ax,ay]=pts[k],[bx,by]=pts[k+1],l=12+depth*5;
+      x.fillStyle=hsl(22,20,l+(rand()-.5)*4);x.beginPath();x.moveTo(base,ay);x.lineTo(ax,ay);x.lineTo(bx,by);x.lineTo(base,by);x.closePath();x.fill();
+      x.fillStyle=hsl(25,24,l+7,.7);x.beginPath();x.moveTo(ax,ay);x.lineTo(bx,by);x.lineTo((ax+bx)/2+side*12,(ay+by)/2);x.closePath();x.fill()}};
+  for(let d=0;d<3;d++){wall(-1,2-d);wall(1,2-d)}
+  // stalactites and stalagmites with a lit side and a dark side
+  const spike=(px,w,h,top)=>{const y0=top?0:H,tip=[px+w*.5,y0+(top?h:-h)];
+    tri(x,[[px,y0],[px+w*.55,y0],tip],hsl(24,22,top?22:18));tri(x,[[px+w*.55,y0],[px+w,y0],tip],hsl(24,22,top?13:10))};
+  x.fillStyle=hsl(24,22,13);x.fillRect(0,0,W,14);
+  for(let px=-10;px<W;px+=18+rand()*30)spike(px,22+rand()*34,40+rand()*(rand()<.3?130:70),true);
+  for(let px=-10;px<W;px+=22+rand()*36)spike(px,26+rand()*40,24+rand()*60,false);
+  // crystal clusters glowing on the walls
+  [[.06,.42,285],[.94,.62,197],[.05,.86,150],[.95,.24,226],[.88,.95,285]].forEach(([fx,fy,hu])=>{const cx=fx*W,cy=fy*H;
+    const gl=x.createRadialGradient(cx,cy,0,cx,cy,70);gl.addColorStop(0,hsl(hu,90,60,.35));gl.addColorStop(1,hsl(hu,90,60,0));x.fillStyle=gl;x.fillRect(cx-70,cy-70,140,140);
+    [[-12,-.5,26],[0,0,38],[12,.45,30],[22,.8,18],[-22,-.85,16]].forEach(([dx,a,h])=>{x.save();x.translate(cx+dx,cy+8);x.rotate(a*(fx>.5?-1:1));
+      tri(x,[[-5,0],[0,-h],[0,0]],hsl(hu,85,66));tri(x,[[0,0],[0,-h],[5,0]],hsl(hu,85,46));x.restore()})});
+  // warm torch light from both sides, and a soft vignette
+  x.globalCompositeOperation='lighter';
+  [[W*.03,H*.2],[W*.97,H*.2]].forEach(([tx,ty])=>{const t=x.createRadialGradient(tx,ty,0,tx,ty,Math.max(W,H)*.6);t.addColorStop(0,'rgba(255,150,50,.34)');t.addColorStop(.3,'rgba(255,110,40,.12)');t.addColorStop(1,'rgba(255,90,20,0)');x.fillStyle=t;x.fillRect(0,0,W,H)});
+  x.globalCompositeOperation='source-over';
+  const v=x.createRadialGradient(W/2,H*.45,Math.min(W,H)*.35,W/2,H/2,Math.max(W,H)*.8);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.55)');x.fillStyle=v;x.fillRect(0,0,W,H)}
+
+/* ---------- solver: can all these pieces be placed, in some order? ---------- */
+const flat=b=>{const f=new Uint8Array(N*N);for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(b[r][c])f[r*N+c]=1;return f};
+function fitsF(f,p,r0,c0){for(const [dr,dc] of p.cells){const r=r0+dr,c=c0+dc;if(r>=N||c>=N||f[r*N+c])return false}return true}
+function applyF(f,p,r0,c0){const g=f.slice();p.cells.forEach(([dr,dc])=>g[(r0+dr)*N+c0+dc]=1);
+  const rows=[],cols=[];for(let i=0;i<N;i++){let a=1,b=1;for(let j=0;j<N;j++){a&=g[i*N+j];b&=g[j*N+i]}if(a)rows.push(i);if(b)cols.push(i)}
+  rows.forEach(r=>{for(let c=0;c<N;c++)g[r*N+c]=0});cols.forEach(c=>{for(let r=0;r<N;r++)g[r*N+c]=0});return g}
+const filled=f=>{let n=0;for(let i=0;i<N*N;i++)n+=f[i];return n};
+// finds an order and spots for all pieces whose final board passes goal; returns the moves or null
+function solve(f,pieces,goal=()=>true,bud={n:0,max:12000}){
+  if(!pieces.length)return goal(f)?[]:null;
+  for(let i=0;i<pieces.length;i++){const p=pieces[i],rest=pieces.filter((_,j)=>j!==i);
+    if(p.bomb){for(let r=0;r<N;r++)for(let c=0;c<N;c++){if(++bud.n>bud.max)return null;
+        const g=f.slice();for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){const rr=r+dr,cc=c+dc;if(rr>=0&&cc>=0&&rr<N&&cc<N)g[rr*N+cc]=0}
+        const s=solve(g,rest,goal,bud);if(s){s.unshift({p,r,c});return s}}
+      continue}
+    for(let r=0;r<N;r++)for(let c=0;c<N;c++){if(!fitsF(f,p,r,c))continue;
+      if(++bud.n>bud.max)return null;
+      const s=solve(applyF(f,p,r,c),rest,goal,bud);if(s){s.unshift({p,r,c});return s}}}
+  return null}
+const solvable=(f,pieces)=>!!solve(f,pieces);
+// a fair deal: smart play can place all 3 AND keep the board from filling up,
+// so a wise player can survive forever. Pieces still come from the normal random pool.
+const ROOM=36;
+// early on the dealer keeps the board emptier (room grows from 16 to 36 cells), so board clears come often
+const fairGoal=start=>{const room=Math.min(ROOM,16+3*diff().t);return g=>filled(g)<=Math.max(room,start-2)};
+
+let G=null,best=0,cellPx=40,gapPx=3,drag=null;
+// inside Game Net the page runs in a frame: the site passes the player's best in the link and gets scores back by message
+const HOSTED=window.parent!==window,hashBest=/best=(\d+)/.exec(location.hash);
+function toHost(type,score){if(HOSTED)try{parent.postMessage({gamenet:type,score},'*')}catch(e){}}
+if(hashBest)best=+hashBest[1];else try{best=+localStorage.getItem('cc-best')||0}catch(e){}
+const boardEl=$('board'),trayEl=$('tray'),cellEls=[];
+for(let i=0;i<N*N;i++){const d=div('cell');boardEl.append(d);cellEls.push(d)}
+const cellEl=(r,c)=>cellEls[r*N+c];
+
+function randPiece(d,onlySmall){
+  let pool;if(onlySmall)pool=SMALL;else{const x=Math.random()*(d.small+d.med+d.big);pool=x<d.small?SMALL:x<d.small+d.med?MED:BIG}
+  return{cells:pick(pool),col:rnd(kinds())}}
+// finds up to 3 pieces that exactly fill the gaps of the rows (or columns) that hold all the blocks
+const compact=g=>{let rows=0,cols=0;for(let i=0;i<N;i++){let a=0,b=0;for(let j=0;j<N;j++){a|=g[i*N+j];b|=g[j*N+i]}rows+=a;cols+=b}return Math.min(rows,cols)<=2};
+function clearingDeal(f){
+  const opts=[];for(const byRow of [true,false]){const lines=range(N).filter(i=>range(N).some(j=>f[byRow?i*N+j:j*N+i]));
+    const H=new Set();lines.forEach(i=>range(N).forEach(j=>{const k=byRow?i*N+j:j*N+i;if(!f[k])H.add(k)}));if(H.size&&H.size<=24)opts.push(H)}
+  for(const H of shuffle(opts)){const out=[],sh=shuffle(SHAPES.slice());
+    const dfs=()=>{if(!H.size)return true;if(out.length===3)return false;const k=Math.min(...H),r=k/N|0,c=k%N;
+      for(const cells of sh){const [ar,ac]=cells.reduce((m,x)=>x[0]<m[0]||(x[0]===m[0]&&x[1]<m[1])?x:m);const r0=r-ar,c0=c-ac;
+        const ks=cells.map(([dr,dc])=>(r0+dr)*N+c0+dc);
+        if(cells.every(([dr,dc])=>r0+dr>=0&&r0+dr<N&&c0+dc>=0&&c0+dc<N)&&ks.every(q=>H.has(q))){ks.forEach(q=>H.delete(q));out.push(cells);if(dfs())return true;out.pop();ks.forEach(q=>H.add(q))}}
+      return false};
+    if(dfs())return out.map(cells=>({cells,col:rnd(kinds())}))}
+  return null}
+function deal(){
+  const d=diff(),f=flat(G.board),goal=fairGoal(filled(f)),n0=filled(f);
+  // early on, often hand out pieces that fit exactly into the gaps, so a good player can wipe the board clean
+  G.stats=G.stats||{deals:0,tries:0,hits:0};G.stats.deals++;
+  if(n0>0&&Math.random()<d.assist){G.stats.tries++;const t=clearingDeal(f);if(t)G.stats.hits++;if(t){G.sweep=true;while(t.length<3)t.push(randPiece(d,true));return shuffle(t)}
+    // otherwise a set that lets the player pack the blocks into a few lines, ready for a clean sweep next time
+    for(let a=0;a<30;a++){const t2=[randPiece(d,a>15),randPiece(d,a>15),randPiece(d,a>15)];if(solve(f,t2,compact,{n:0,max:15000})){G.stats.compact=(G.stats.compact||0)+1;G.sweep=true;return t2}}}
+  const tries=[[30,false,goal],[20,true,goal],[20,false,null],[20,true,null]];
+  for(const [n,small,gl] of tries)for(let a=0;a<n;a++){
+    const t=[randPiece(d,small),randPiece(d,small),randPiece(d,small)];
+    if(solve(f,t,gl||undefined))return t}
+  return[0,1,2].map(()=>({cells:[[0,0]],col:rnd(kinds())}))}
+function canPlace(p,r0,c0){
+  for(const [dr,dc] of p.cells){const r=r0+dr,c=c0+dc;
+    if(r<0||c<0||r>=N||c>=N)return false;
+    if(!p.bomb&&G.board[r][c])return false}
+  return true}
+function fitsAnywhere(p){for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(canPlace(p,r,c))return true;return false}
+function findLines(b){
+  const rows=[],cols=[];
+  for(let i=0;i<N;i++){if(range(N).every(j=>b[i][j]))rows.push(i);if(range(N).every(j=>b[j][i]))cols.push(i)}
+  return{rows,cols}}
+function boardEmpty(){return G.board.every(row=>row.every(v=>!v))}
+function countCracks(){let n=0;G.board.forEach(row=>row.forEach(v=>{if(v&&v.crack)n++}));return n}
+function say(t){G.msgs.push(t)}
+
+function place(ti,r0,c0){
+  const p=G.tray[ti];G.tray[ti]=null;G.msgs=[];
+  const popped=[],cracksBefore=countCracks();let cleared=false,heals=0;
+  if(p.bomb){
+    let k=0;
+    for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){const r=r0+dr,c=c0+dc;
+      if(r<0||c<0||r>=N||c>=N)continue;const v=G.board[r][c];if(v){k++;if(v.crack)heals++}G.board[r][c]=null;popped.push({r,c})}
+    G.score+=k*SCORE.blast;say('KABOOM!');cleared=k>0;
+  }else{p.cells.forEach(([dr,dc])=>G.board[r0+dr][c0+dc]={col:p.col});G.score+=p.cells.length*SCORE.block}
+  const {rows,cols}=findLines(G.board),n=rows.length+cols.length;
+  if(n){
+    cleared=true;
+    const lines=[...rows.map(r=>range(N).map(c=>G.board[r][c])),...cols.map(c=>range(N).map(r=>G.board[r][c]))];
+    let mono=0,monoCol=0;
+    lines.forEach(L=>{const blocks=L.filter(v=>!v.crack);if(kinds()>1&&blocks.length&&blocks.every(v=>v.col===blocks[0].col)){mono++;monoCol=blocks[0].col}});
+    const seen=new Set();let lineHeals=0;
+    rows.forEach(r=>range(N).forEach(c=>seen.add(r*N+c)));cols.forEach(c=>range(N).forEach(r=>seen.add(r*N+c)));
+    seen.forEach(k=>{const r=k/N|0,c=k%N;if(G.board[r][c].crack)lineHeals++;G.board[r][c]=null;popped.push({r,c})});
+    heals+=lineHeals;
+    const linePts=SCORE.line*n*n;G.score+=linePts;
+    if(lineHeals)G.score+=lineHeals*SCORE.heal;
+    if(n>1)say(n>3?'Amazing!':n>2?'Great!':'Nice!');
+    if(mono){G.score+=mono*SCORE.mono;G.bombs+=mono;say(`All ${NAMES[monoCol]}! TNT ready`)}
+  }
+  if(heals&&cracksBefore>0&&countCracks()===0){G.score+=SCORE.allHealed;say('No rocks left!')}
+  if(cleared&&boardEmpty()){G.score+=SCORE.boardClear;say('BOARD CLEAR!');G.big=true;
+    G.stage++;if(G.stage<COLORS.length)say(`New gem: ${NAMES[G.stage]}!`);if(G.stage===1)say('Watch out, rocks are coming')}
+  const d=diff();
+  if(d.t>G.tier){G.tier=d.t;G.spreadIn=Math.min(G.spreadIn,d.spread);G.seedIn=Math.min(G.seedIn,G.stage===1&&!countCracks()?4:d.seed)}
+  G.turn++;
+  // rocks hold still while a clean-sweep set is in the tray, so they can't spoil it
+  if(!G.sweep){if(--G.spreadIn<=0){spreadCrack();G.spreadIn=d.spread}
+  if(--G.seedIn<=0){seedCrack();G.seedIn=d.seed}}
+  if(G.tray.every(x=>!x)){G.sweep=false;G.tray=deal();G.goal=fairGoal(filled(flat(G.board)))}
+  while(G.bombs>0){const i=G.tray.findIndex(q=>q&&!q.bomb);if(i<0)break;G.tray[i]={cells:[[0,0]],bomb:true};G.bombs--}
+  if(G.score>best){best=G.score;if(!hashBest)try{localStorage.setItem('cc-best',best)}catch(e){}}
+  toHost('score',G.score);
+  if(G.msgs.length){G.msg=G.msgs.join(' · ');G.msgAt=performance.now()}
+  render(popped);buildTray();checkOver();
+}
+// a crack never takes the last gap of a row or column, and never blocks the pieces still in the tray
+function crackable(r,c){
+  if(G.board[r][c])return false;
+  const rowGaps=range(N).filter(j=>!G.board[r][j]).length,colGaps=range(N).filter(i=>!G.board[i][c]).length;
+  if(rowGaps<2||colGaps<2)return false;
+  const f=flat(G.board),left=G.tray.filter(Boolean);
+  if(G.goal&&solve(f,left,G.goal)){f[r*N+c]=1;return !!solve(f,left,G.goal)}
+  f[r*N+c]=1;return solvable(f,left)}
+function addCrack(opts){for(const [r,c] of shuffle(opts)){if(crackable(r,c)){G.board[r][c]={crack:true,v:rnd(ROCKS.length)};G.fresh.push([r,c]);return true}}return false}
+function spreadCrack(){
+  const opts=[];
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){const v=G.board[r][c];if(!v||!v.crack)continue;
+    DIRS.forEach(([dr,dc])=>{const rr=r+dr,cc=c+dc;if(rr>=0&&cc>=0&&rr<N&&cc<N&&!G.board[rr][cc])opts.push([rr,cc])})}
+  addCrack(opts)}
+function seedCrack(){const e=[];for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(!G.board[r][c])e.push([r,c]);addCrack(e)}
+
+function render(popped=[]){
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    const el=cellEl(r,c),v=G.board[r][c];let cls='cell';
+    if(v){cls+=v.crack?' crack':' blk';el.style.setProperty('--img',art(v))}
+    el.className=cls}
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
+    popped.forEach(({r,c})=>cellEl(r,c).animate([{transform:'scale(1.25)',filter:'brightness(2.4)'},{transform:'scale(1)',filter:'none'}],{duration:380,easing:'ease-out'}));
+    G.fresh.forEach(([r,c])=>cellEl(r,c).animate([{transform:'rotate(-8deg) scale(1.15)'},{transform:'rotate(6deg)'},{transform:'none'}],{duration:420}));
+    if(G.big)boardEl.animate([{boxShadow:'0 0 0 0 #f2c230'},{boxShadow:'0 0 40px 10px #f2c230'},{boxShadow:'0 0 0 0 #f2c230'}],{duration:900})}
+  G.fresh=[];G.big=false;
+  hud();
+  $('over').hidden=!G.over;
+  if(G.over)$('otext').textContent=`Score: ${G.score}`+(G.score>=best&&G.score>0?' · New best!':'');
+}
+function hud(){$('score').textContent=G.score;$('best').textContent=best;
+  const m=$('msg');m.textContent=G.msg||'';m.style.opacity=G.msg&&performance.now()-G.msgAt<3000?1:0}
+function pieceEl(p,size){
+  const {h,w}=dims(p.cells),el=div('pc');
+  el.style.gridTemplateColumns=`repeat(${w},var(--${size}))`;el.style.gridAutoRows=`var(--${size})`;
+  const on=new Set(p.cells.map(([r,c])=>r*w+c));
+  for(let i=0;i<h*w;i++){const d=div('cell');
+    if(!on.has(i))d.classList.add('void');else if(p.bomb)d.classList.add('bomb');else{d.classList.add('blk');d.style.setProperty('--img',art({col:p.col}))}
+    el.append(d)}
+  if(p.bomb&&size==='mini'){el.style.gridTemplateColumns='calc(var(--mini) * 1.6)';el.style.gridAutoRows='calc(var(--mini) * 1.6)'}
+  return el}
+function buildTray(){
+  trayEl.innerHTML='';
+  G.tray.forEach((p,i)=>{const s=div('slot');
+    if(p){const pc=pieceEl(p,'mini');if(!fitsAnywhere(p))s.classList.add('nofit');
+      pc.addEventListener('pointerdown',e=>startDrag(e,i,s));s.append(pc)}
+    trayEl.append(s)})}
+function checkOver(){if(!G.tray.some(p=>p&&fitsAnywhere(p))){G.over=true;toHost('over',G.score);render()}}
+
+let prev=[];
+function clearPreview(){prev.forEach(el=>el.classList.remove('preview','willclear','blast'));prev=[]}
+function mark(el,c){el.classList.add(c);prev.push(el)}
+function showPreview(){
+  clearPreview();if(!drag||!drag.target)return;
+  const [r0,c0]=drag.target,p=drag.p;
+  if(p.bomb){for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){const r=r0+dr,c=c0+dc;if(r>=0&&c>=0&&r<N&&c<N)mark(cellEl(r,c),'blast')}return}
+  const b=G.board.map(row=>row.slice());
+  p.cells.forEach(([dr,dc])=>{const el=cellEl(r0+dr,c0+dc);b[r0+dr][c0+dc]={col:p.col};el.style.setProperty('--pk',COLORS[p.col]);mark(el,'preview')});
+  const {rows,cols}=findLines(b);
+  rows.forEach(r=>range(N).forEach(c=>mark(cellEl(r,c),'willclear')));
+  cols.forEach(c=>range(N).forEach(r=>mark(cellEl(r,c),'willclear')));
+}
+function startDrag(e,i,slot){
+  if(G.over||drag)return;e.preventDefault();
+  const p=G.tray[i],ghost=pieceEl(p,'cell');ghost.classList.add('ghost');document.body.append(ghost);
+  drag={i,p,ghost,slot,pid:e.pointerId,touch:e.pointerType!=='mouse',target:null};slot.classList.add('lifting');
+  addEventListener('pointermove',moveDrag);addEventListener('pointerup',endDrag);addEventListener('pointercancel',endDrag);
+  moveDrag(e)}
+function moveDrag(e){
+  if(!drag||e.pointerId!==drag.pid)return;
+  const gr=drag.ghost.getBoundingClientRect();
+  const x=e.clientX-gr.width/2,y=e.clientY-gr.height-(drag.touch?44:14);
+  drag.ghost.style.transform=`translate(${x}px,${y}px)`;
+  const br=boardEl.getBoundingClientRect(),step=cellPx+gapPx;
+  const c0=Math.round((x-br.left-2-gapPx)/step),r0=Math.round((y-br.top-2-gapPx)/step);
+  const t=canPlace(drag.p,r0,c0)?[r0,c0]:null;
+  if(String(t)!==String(drag.target)){drag.target=t;showPreview()}}
+function endDrag(e){
+  if(!drag||e.pointerId!==drag.pid)return;
+  removeEventListener('pointermove',moveDrag);removeEventListener('pointerup',endDrag);removeEventListener('pointercancel',endDrag);
+  const d=drag;drag=null;d.ghost.remove();clearPreview();d.slot.classList.remove('lifting');
+  if(d.target&&e.type==='pointerup')place(d.i,d.target[0],d.target[1])}
+
+function layout(){
+  const w=Math.min($('app').clientWidth,440);
+  const size=Math.min(w,Math.max(260,innerHeight-300));
+  cellPx=Math.floor((size-4-gapPx*9)/8);
+  const s=document.documentElement.style;
+  s.setProperty('--cell',cellPx+'px');s.setProperty('--gap',gapPx+'px');s.setProperty('--mini',Math.max(12,Math.floor(cellPx*.5))+'px')}
+addEventListener('resize',layout);layout();
+
+const info=$('info');
+$('infoBtn').onclick=()=>{try{info.showModal()}catch(e){info.setAttribute('open','')}};
+$('closeInfo').onclick=()=>info.close();
+info.addEventListener('click',e=>{if(e.target===info)info.close()});
+
+function newGame(){
+  if(G&&!G.over&&G.score>0)toHost('over',G.score);
+  G={stage:0,score:0};const d=diff();
+  G={stage:0,board:grid(),tray:[],score:0,turn:0,tier:0,over:false,bombs:0,msg:'',msgAt:0,msgs:[],fresh:[],big:false,spreadIn:d.spread,seedIn:d.seed};
+  G.tray=deal();G.goal=fairGoal(filled(flat(G.board)));
+  render();buildTray()}
+$('again').onclick=newGame;$('restart').onclick=newGame;
+setInterval(()=>{if(G&&G.msg&&performance.now()-G.msgAt>3000)hud()},500);
+// slow embers drifting up through the torch light
+(function dust(){const c=$('dust'),x=c.getContext('2d');if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const P=range(26).map(()=>({x:Math.random(),y:Math.random(),v:.00025+Math.random()*.0006,r:.6+Math.random()*1.6,p:Math.random()*6}));
+  (function f(){const W=c.width=innerWidth,H=c.height=innerHeight;x.clearRect(0,0,W,H);
+    P.forEach(d=>{d.y-=d.v;d.p+=.02;if(d.y<-.02){d.y=1.02;d.x=Math.random()}const a=.35+.35*Math.sin(d.p);
+      x.fillStyle=`rgba(255,${170+Math.round(60*a)},90,${a})`;x.beginPath();x.arc(d.x*W+Math.sin(d.p)*8,d.y*H,d.r,0,7);x.fill()});
+    requestAnimationFrame(f)})()})();
+drawCave();addEventListener('resize',()=>{clearTimeout(drawCave.t);drawCave.t=setTimeout(drawCave,200)});
+newGame();
+})();
+</script>
+
+</body>
+</html>

@@ -16,6 +16,14 @@ const GAMES = [
     create: createFirefly,
     thumb: drawFireflyThumb,
   },
+  {
+    id: 'gohar',
+    title: 'گوهر خیراندیش',
+    rtl: true,
+    blurb: 'Drop gems into the cave and clear full lines before the rocks take over. Clear the whole board to find a new gem.',
+    create: createGohar,
+    thumb: drawGoharThumb,
+  },
 ];
 
 const $ = id => document.getElementById(id);
