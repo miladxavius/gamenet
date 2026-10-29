@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0c1020">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Game Net">
+<title>Game Net</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500;700&family=JetBrains+Mono:wght@500;700&family=Vazirmatn:wght@700;800&display=swap">
+<style>
+  /* Layout: a neighbourhood gamenet at night. Neon sign up top, game "stations" below, one column on phones. Single dark look by choice. */
+  :root {
+    --bg: #0c1020;
+    --floor: #121834;
+    --panel: #171f40;
+    --line: #2a3566;
+    --fg: #eef0ff;
+    --muted: #9aa3d6;
+    --amber: #ffb547;
+    --cyan: #5fe1ff;
+    --danger: #ff7a7a;
+    --f-display: "Bungee", "Arial Black", Impact, sans-serif;
+    --f-body: "Rubik", -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --f-data: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --f-fa: "Vazirmatn", "Geeza Pro", Tahoma, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  body {
+    background: var(--bg);
+    background-image: radial-gradient(ellipse 80% 40% at 50% -10%, rgba(255,181,71,0.10), transparent 70%);
+    background-attachment: fixed;
+    color: var(--fg); font-family: var(--f-body); font-size: 16px; line-height: 1.5;
+  }
+  .wrap {
+    max-width: 760px; margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 20px 40px;
+    display: flex; flex-direction: column; gap: 22px;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  /* Neon sign */
+  .sign { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .logo {
+    font-family: var(--f-display); font-size: clamp(30px, 8vw, 44px); line-height: 1; margin: 0; letter-spacing: 0.02em;
+    color: var(--amber);
+    text-shadow: 0 0 6px rgba(255,181,71,0.8), 0 0 22px rgba(255,181,71,0.45);
+  }
+  .logo span { color: var(--cyan); text-shadow: 0 0 6px rgba(95,225,255,0.8), 0 0 22px rgba(95,225,255,0.4); }
+  @media (prefers-reduced-motion: no-preference) {
+    .logo span { animation: flicker 6s infinite; }
+    @keyframes flicker { 0%, 92%, 100% { opacity: 1 } 93% { opacity: 0.35 } 95% { opacity: 1 } 96% { opacity: 0.5 } }
+  }
+  .tagline { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+
+  .me {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 5px 14px 5px 5px;
+  }
+  .me .tag { font-weight: 700; }
+  .me .edit { background: none; border: 0; color: var(--cyan); font-size: 13px; padding: 4px; }
+
+  .av {
+    width: 40px; height: 40px; border-radius: 50%; flex: none;
+    display: grid; place-items: center; font-size: 22px; line-height: 1;
+  }
+  .av.lg { width: 64px; height: 64px; font-size: 36px; }
+  .av.sm { width: 30px; height: 30px; font-size: 17px; }
+
+  h2 { font-family: var(--f-display); font-weight: 400; font-size: 15px; letter-spacing: 0.08em; color: var(--muted); margin: 0; text-transform: uppercase; }
+  .section { display: flex; flex-direction: column; gap: 12px; }
+
+  /* Profile screen */
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+  .card h1 { font-family: var(--f-display); font-weight: 400; font-size: 22px; margin: 0; text-wrap: balance; }
+  .card p { margin: 0; color: var(--muted); }
+  .avatars { display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 10px; }
+  .pick {
+    aspect-ratio: 1; max-width: 100%; border-radius: 16px; border: 2px solid transparent;
+    display: grid; place-items: center; font-size: 30px; line-height: 1;
+    transition: transform 0.12s ease;
+  }
+  .pick:hover { transform: translateY(-2px); }
+  .pick[aria-pressed="true"] { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(255,181,71,0.25), 0 0 18px rgba(255,181,71,0.35); }
+  label { font-weight: 700; font-size: 14px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  input[type="text"] {
+    font: inherit; font-size: 17px; color: var(--fg); background: var(--floor);
+    border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+  }
+  .hint { font-size: 13px; color: var(--muted); }
+  .err { font-size: 14px; color: var(--danger); margin: 0; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn {
+    border: 0; border-radius: 12px; padding: 12px 20px; font-weight: 700;
+    background: var(--amber); color: #2a1a00;
+  }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+
+  /* Game stations */
+  .stations { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .station {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 18px; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .screen { position: relative; aspect-ratio: 16 / 10; max-width: 100%; background: #070a16; border-bottom: 1px solid var(--line); }
+  .screen canvas { width: 100%; height: 100%; display: block; }
+  .pc { position: absolute; top: 10px; left: 10px; font-family: var(--f-data); font-size: 11px; letter-spacing: 0.1em; color: var(--cyan); background: rgba(7,10,22,0.7); padding: 3px 8px; border-radius: 6px; }
+  .station .body { padding: 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+  .gtitle { font-family: var(--f-fa); font-weight: 800; font-size: 22px; margin: 0; line-height: 1.3; }
+  .blurb { margin: 0; color: var(--muted); font-size: 14px; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+  .stats b { font-family: var(--f-data); color: var(--fg); font-variant-numeric: tabular-nums; }
+  .station .row { margin-top: auto; }
+  .station .btn { flex: 1; }
+  .empty-station { border-style: dashed; background: transparent; }
+  .empty-station .screen { aspect-ratio: auto; height: 84px; display: grid; place-items: center; color: var(--line); font-family: var(--f-display); font-size: 40px; background: transparent; }
+  .empty-station .gtitle { font-family: var(--f-body); font-size: 18px; font-weight: 700; }
+
+  .notice { background: rgba(255,122,122,0.1); border: 1px solid rgba(255,122,122,0.4); color: #ffd2d2; border-radius: 12px; padding: 10px 14px; font-size: 14px; margin: 0; }
+
+  /* Leaderboard */
+  .topbar { display: flex; align-items: center; gap: 12px; }
+  .back { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px; font-weight: 700; }
+  .board { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .board li {
+    display: grid; grid-template-columns: 34px auto 1fr auto; align-items: center; gap: 12px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px;
+  }
+  .board li.mine { border-color: var(--cyan); box-shadow: 0 0 14px rgba(95,225,255,0.2); }
+  .board .rank { font-family: var(--f-data); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .board li:nth-child(1) .rank { color: var(--amber); }
+  .board .who { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .board .pts { font-family: var(--f-data); font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); margin: 0; }
+
+  /* Playing */
+  #play { position: fixed; inset: 0; z-index: 20; background: #05060f; display: flex; flex-direction: column; }
+  #play .bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding-top: calc(8px + env(safe-area-inset-top, 0px)); padding-bottom: 8px;
+    padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+  #play .bar .who { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
+  #stage { flex: 1; min-height: 0; display: grid; place-items: center; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  #stage canvas { display: block; touch-action: none; border-radius: 12px; }
+  body.playing { overflow: hidden; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap" id="v-loading">
+  <header><h1 class="logo">GAME<span>NET</span></h1><p class="tagline">Opening the doors…</p></header>
+</div>
+
+<div class="wrap" id="v-profile" hidden>
+  <header><h1 class="logo">GAME<span>NET</span></h1><p class="tagline">Your crew's arcade. Pick a face, claim a tag, beat your friends.</p></header>
+  <form class="card" id="profileForm" novalidate>
+    <h1 id="profileHeading">Make your player</h1>
+    <div class="field"><span class="label" id="avLabel"><b>Choose your avatar</b></span><div class="avatars" id="avatarGrid" role="group" aria-labelledby="avLabel"></div></div>
+    <div class="field">
+      <label for="tagInput">Gamertag</label>
+      <input id="tagInput" type="text" maxlength="14" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g. NightPilot">
+      <span class="hint">3 to 14 letters, numbers or _. Nobody else can use it.</span>
+    </div>
+    <p class="err" id="profileErr" hidden></p>
+    <div class="row">
+      <button class="btn" id="profileSave" type="submit">Enter Game Net</button>
+      <button class="btn ghost" id="profileCancel" type="button" hidden>Cancel</button>
+    </div>
+  </form>
+</div>
+
+<div class="wrap" id="v-dash" hidden>
+  <div class="sign">
+    <h1 class="logo">GAME<span>NET</span></h1>
+    <div class="me"><div class="av sm" id="meAv"></div><span class="tag" id="meTag"></span><button class="edit" id="editProfile" type="button">Edit</button></div>
+  </div>
+  <p class="notice" id="dashNotice" hidden></p>
+  <section class="section"><h2>Games</h2><div class="stations" id="stations"></div></section>
+</div>
+
+<div class="wrap" id="v-board" hidden>
+  <div class="topbar"><button class="back" id="boardBack" type="button">← Games</button><h2>Leaderboard</h2></div>
+  <p class="gtitle" id="boardTitle"></p>
+  <ol class="board" id="boardList"></ol>
+  <p class="muted" id="boardEmpty" hidden></p>
+</div>
+
+<div id="play" hidden>
+  <div class="bar">
+    <button class="back" id="playBack" type="button">← Games</button>
+    <div class="who"><div class="av sm" id="playAv"></div><span id="playTag"></span></div>
+  </div>
+  <div id="stage"></div>
+</div>
+
+<script src="vendor/supabase-2.45.4.js"></script>
+<script src="js/config.js"></script>
+<script src="js/minaret.js"></script>
+<script src="js/firefly.js"></script>
+<script src="js/thumb.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
