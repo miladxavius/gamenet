@@ -90,6 +90,12 @@
   }
   .pick:hover { transform: translateY(-2px); }
   .pick[aria-pressed="true"] { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(255,181,71,0.25), 0 0 18px rgba(255,181,71,0.35); }
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--floor); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
+  .modes[hidden] { display: none; }
+  .mode { border: 0; background: transparent; border-radius: 9px; padding: 10px 8px; font-weight: 700; font-size: 14px; color: var(--muted); }
+  .mode[aria-selected="true"] { background: var(--panel); color: var(--fg); box-shadow: 0 0 0 1px var(--line); }
+  input[type="password"] { font: inherit; font-size: 22px; letter-spacing: 0.4em; color: var(--fg); background: var(--floor); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; font-family: var(--f-data); }
+  input:disabled { opacity: 0.6; }
   label { font-weight: 700; font-size: 14px; }
   .field { display: flex; flex-direction: column; gap: 6px; }
   input[type="text"] {
@@ -165,17 +171,27 @@
 <div class="wrap" id="v-profile" hidden>
   <header><h1 class="logo">GAME<span>NET</span></h1><p class="tagline">Your crew's arcade. Pick a face, claim a tag, beat your friends.</p></header>
   <form class="card" id="profileForm" novalidate>
+    <div class="modes" id="modes" role="tablist">
+      <button type="button" class="mode" id="modeNew" role="tab" aria-selected="true">New player</button>
+      <button type="button" class="mode" id="modeLogin" role="tab" aria-selected="false">I have an account</button>
+    </div>
     <h1 id="profileHeading">Make your player</h1>
-    <div class="field"><span class="label" id="avLabel"><b>Choose your avatar</b></span><div class="avatars" id="avatarGrid" role="group" aria-labelledby="avLabel"></div></div>
-    <div class="field">
+    <div class="field" id="avField"><span class="label" id="avLabel"><b>Choose your avatar</b></span><div class="avatars" id="avatarGrid" role="group" aria-labelledby="avLabel"></div></div>
+    <div class="field" id="tagField">
       <label for="tagInput">Gamertag</label>
-      <input id="tagInput" type="text" maxlength="14" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g. NightPilot">
-      <span class="hint">3 to 14 letters, numbers or _. Nobody else can use it.</span>
+      <input id="tagInput" type="text" maxlength="14" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="e.g. NightPilot">
+      <span class="hint" id="tagHint">3 to 14 letters, numbers or _. Nobody else can use it.</span>
+    </div>
+    <div class="field" id="pinField">
+      <label for="pinInput">6-digit PIN</label>
+      <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="new-password" placeholder="••••••">
+      <span class="hint" id="pinHint">You'll use your gamertag and this PIN to log in on any phone.</span>
     </div>
     <p class="err" id="profileErr" hidden></p>
     <div class="row">
       <button class="btn" id="profileSave" type="submit">Enter Game Net</button>
       <button class="btn ghost" id="profileCancel" type="button" hidden>Cancel</button>
+      <button class="btn ghost" id="logoutBtn" type="button" hidden>Log out</button>
     </div>
   </form>
 </div>

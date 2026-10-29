@@ -7,8 +7,8 @@ Play: https://miladxavius.github.io/gamenet/
 ## How it works
 
 - Static site hosted on GitHub Pages (`index.html`, `js/`, `vendor/`).
-- Profiles and scores live in Supabase. Players sign in anonymously on their device, so nobody needs an account.
-- `supabase/schema.sql` creates the tables and the rules (anyone can read, each player can only change their own profile and scores).
+- Profiles and scores live in Supabase. Players log in with their gamertag and a 6-digit PIN (the gamertag maps to a login address on `players.gamenet.app`; no email is ever sent, so "Confirm email" must be off in Supabase).
+- `supabase/schema.sql` creates the tables and rules; `supabase/02-accounts.sql` adds the gamertag + PIN accounts (run both, in order, on a new project).
 - `js/config.js` holds the Supabase project URL and its publishable key, which is meant to be public.
 
 ## Adding a game

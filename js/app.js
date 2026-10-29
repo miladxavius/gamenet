@@ -49,14 +49,40 @@ function goLocal(reason) {
   n.textContent = reason; n.hidden = !reason;
 }
 
-// ---------- Profile screen ----------
-function openProfile(editing) {
-  pickedAvatar = me ? AVATARS.indexOf(avatarOf(me.avatar)) : Math.floor(Math.random() * AVATARS.length);
-  $('profileHeading').textContent = editing ? 'Edit your player' : 'Make your player';
-  $('profileSave').textContent = editing ? 'Save' : 'Enter Game Net';
+// ---------- Sign up, log in, edit ----------
+// Each gamertag maps to a login address on Supabase; the PIN is the password.
+const LOGIN_DOMAIN = 'players.gamenet.app';
+const PIN_RE = /^[0-9]{6}$/;
+const loginEmail = tag => tag.toLowerCase() + '@' + LOGIN_DOMAIN;
+let formMode = 'new';           // 'new' | 'login' | 'edit'
+
+function setMode(m) {
+  formMode = m;
+  const editing = m === 'edit', login = m === 'login';
+  $('modes').hidden = editing || !online;
+  $('modeNew').setAttribute('aria-selected', String(m === 'new'));
+  $('modeLogin').setAttribute('aria-selected', String(login));
+  $('profileHeading').textContent = editing ? 'Edit your player' : login ? 'Welcome back' : 'Make your player';
+  $('avField').hidden = login;
+  $('pinField').hidden = editing || !online;
+  $('tagInput').disabled = editing && online;
+  $('tagHint').textContent = editing && online ? "Your gamertag is your login, so it can't be changed."
+    : login ? '' : '3 to 14 letters, numbers or _. Nobody else can use it.';
+  $('tagHint').hidden = login;
+  $('pinInput').autocomplete = login ? 'current-password' : 'new-password';
+  $('pinHint').textContent = login ? '' : "You'll use your gamertag and this PIN to log in on any phone.";
+  $('pinHint').hidden = login;
+  $('profileSave').textContent = editing ? 'Save' : login ? 'Log in' : 'Enter Game Net';
   $('profileCancel').hidden = !editing;
-  $('tagInput').value = me ? me.tag : '';
+  $('logoutBtn').hidden = !(editing && online);
   $('profileErr').hidden = true;
+}
+
+function openProfile(mode) {
+  pickedAvatar = me ? AVATARS.indexOf(avatarOf(me.avatar)) : Math.floor(Math.random() * AVATARS.length);
+  $('tagInput').value = me ? me.tag : '';
+  $('pinInput').value = '';
+  setMode(mode);
   renderAvatarGrid();
   show('profile');
 }
@@ -76,35 +102,78 @@ function renderAvatarGrid() {
 
 function profileError(msg) { const e = $('profileErr'); e.textContent = msg; e.hidden = false; }
 
+async function loadMe() {
+  const [p, s] = await Promise.all([
+    sb.from('players').select('tag, avatar').eq('id', myId).maybeSingle(),
+    sb.from('scores').select('game, best').eq('player_id', myId),
+  ]);
+  if (p.error || s.error) throw p.error || s.error;
+  if (!p.data) return null;
+  const m = { tag: cleanTag(p.data.tag), avatar: p.data.avatar, best: {} };
+  for (const r of s.data || []) m.best[r.game] = Number(r.best) || 0;
+  return m;
+}
+
+$('modeNew').addEventListener('click', () => setMode('new'));
+$('modeLogin').addEventListener('click', () => setMode('login'));
 $('profileCancel').addEventListener('click', () => show('dash'));
+$('editProfile').addEventListener('click', () => openProfile('edit'));
+$('logoutBtn').addEventListener('click', async () => {
+  await sb.auth.signOut().catch(() => {});
+  myId = null; me = null;
+  for (const k in boards) delete boards[k];
+  openProfile('login');
+});
+
 $('profileForm').addEventListener('submit', async e => {
   e.preventDefault();
-  const tag = $('tagInput').value.trim();
-  if (!TAG_RE.test(tag)) { profileError('Use 3 to 14 letters, numbers or _ with no spaces.'); return; }
+  const tag = $('tagInput').value.trim(), pin = $('pinInput').value.trim();
   const btn = $('profileSave');
   btn.disabled = true;
   try {
-    if (online) {
-      const row = { tag, avatar: pickedAvatar };
-      const { error } = me
-        ? await sb.from('players').update(row).eq('id', myId)
-        : await sb.from('players').insert(Object.assign({ id: myId }, row));
-      if (error) {
-        if (error.code === '23505') profileError(`“${tag}” is taken. Try another gamertag.`);
-        else profileError("Couldn't save your player. Check your connection and try again.");
-        return;
-      }
-      me = Object.assign({ best: {} }, me || {}, row);
-    } else {
+    if (!online) {
+      if (!TAG_RE.test(tag)) { profileError('Use 3 to 14 letters, numbers or _ with no spaces.'); return; }
       me = Object.assign({ best: {} }, me || {}, { tag, avatar: pickedAvatar });
       saveLocal();
+      show('dash');
+      return;
     }
+    if (formMode === 'edit') {
+      const { error } = await sb.from('players').update({ avatar: pickedAvatar }).eq('id', myId);
+      if (error) { profileError("Couldn't save your avatar. Check your connection and try again."); return; }
+      me.avatar = pickedAvatar;
+      show('dash');
+      return;
+    }
+    if (!TAG_RE.test(tag)) { profileError('Gamertags are 3 to 14 letters, numbers or _ with no spaces.'); return; }
+    if (!PIN_RE.test(pin)) { profileError('Your PIN is 6 numbers, like 482913.'); return; }
+    if (formMode === 'login') {
+      const { data, error } = await sb.auth.signInWithPassword({ email: loginEmail(tag), password: pin });
+      if (error) { profileError(/invalid/i.test(error.message) ? 'That gamertag and PIN don’t match. Try again.' : "Couldn't log in. Check your connection and try again."); return; }
+      myId = data.user.id;
+    } else {
+      const { data, error } = await sb.auth.signUp({
+        email: loginEmail(tag), password: pin,
+        options: { data: { tag, avatar: pickedAvatar } },
+      });
+      if (error) {
+        profileError(/registered|exists|duplicate|database/i.test(error.message)
+          ? `“${tag}” is taken. Pick another gamertag, or log in if it’s yours.`
+          : "Couldn't create your player. Check your connection and try again.");
+        return;
+      }
+      if (!data.session) { profileError('Your player was made, but logging in needs a setting changed in Supabase. Ask Milad.'); return; }
+      myId = data.user.id;
+    }
+    me = await loadMe();
+    if (!me) { profileError("Couldn't find your player. Try again in a moment."); return; }
     show('dash');
+  } catch (err) {
+    profileError("Couldn't reach Game Net. Check your connection and try again.");
   } finally {
     btn.disabled = false;
   }
 });
-$('editProfile').addEventListener('click', () => openProfile(true));
 
 // ---------- Dashboard ----------
 function topOf(game) { const b = boards[game.id]; return b && b.length ? b[0] : null; }
@@ -231,31 +300,17 @@ async function boot() {
   try {
     if (!window.supabase || !cfg.key || cfg.key.startsWith('PASTE_')) throw new Error('not configured');
     sb = window.supabase.createClient(cfg.url, cfg.key, { auth: { persistSession: true, autoRefreshToken: true } });
-    let { data: { session } } = await sb.auth.getSession();
-    if (!session) {
-      const r = await sb.auth.signInAnonymously();
-      if (r.error) throw r.error;
-      session = r.data.session;
-    }
-    myId = session.user.id;
-    const [p, s] = await Promise.all([
-      sb.from('players').select('tag, avatar').eq('id', myId).maybeSingle(),
-      sb.from('scores').select('game, best').eq('player_id', myId),
-    ]);
-    if (p.error || s.error) throw p.error || s.error;
+    const { data: { session } } = await sb.auth.getSession();
     online = true;
-    if (p.data) {
-      me = { tag: cleanTag(p.data.tag), avatar: p.data.avatar, best: {} };
-      for (const r of s.data || []) me.best[r.game] = Number(r.best) || 0;
-      // carry over a better score played while offline
-      const local = loadLocal();
-      if (local && local.best) GAMES.forEach(g => { if ((Number(local.best[g.id]) || 0) > bestOf(g)) submitScore(g, Number(local.best[g.id])); });
+    if (session && !session.user.is_anonymous) {
+      myId = session.user.id;
+      me = await loadMe();
     }
   } catch (err) {
     console.warn('Game Net is offline:', err && err.message);
     me = loadLocal();
     goLocal("Couldn't reach the Game Net server, so scores are saved on this device for now.");
   }
-  me ? show('dash') : openProfile(false);
+  me ? show('dash') : openProfile('new');
 }
 boot();
