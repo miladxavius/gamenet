@@ -1,7 +1,7 @@
 import {
 	BoxGeometry,
 	Vector3
-} from 'three';
+} from './three.module.min.js'; // relative path (was 'three') so no import map is needed: older phone browsers lack import maps
 
 const _tempNormal = new Vector3();
 
