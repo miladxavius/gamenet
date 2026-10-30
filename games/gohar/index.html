@@ -81,6 +81,7 @@ header h1{background:linear-gradient(180deg,#fff3b0 0%,#ffc94a 45%,#ff8a1f 100%)
     <div class="score"><small>SCORE</small><span id="score">0</span></div>
     <div class="tools">
       <div class="best"><small>BEST</small><span id="best">0</span></div>
+      <button class="icon" id="sound" type="button" aria-label="Sound"></button>
       <button class="icon" id="restart" type="button" aria-label="Restart">↻</button>
       <button class="icon" id="infoBtn" type="button" aria-label="How to play">i</button>
     </div>
@@ -111,6 +112,7 @@ header h1{background:linear-gradient(180deg,#fff3b0 0%,#ffc94a 45%,#ff8a1f 100%)
   </div>
 </dialog>
 
+<script src="../../js/sound.js?v=1"></script>
 <script>
 (function(){
 const N=8;
@@ -310,6 +312,38 @@ const boardEl=$('board'),trayEl=$('tray'),cellEls=[];
 for(let i=0;i<N*N;i++){const d=div('cell');boardEl.append(d);cellEls.push(d)}
 const cellEl=(r,c)=>cellEls[r*N+c];
 
+// sound: glassy gem clinks tuned to a minor pentatonic, stone crunches, a TNT boom, and quiet cave music
+const S=window.GameSound,PENTA=[0,3,5,7,10];
+const gemNote=(col,k=0)=>S.note(440,PENTA,col+k);
+const SFX=S?{
+  lift(){S.noise(.05,{freq:900,q:2,vol:.1});S.tone(520,.06,{type:'triangle',vol:.05})},
+  miss(){S.tone(170,.16,{to:90,type:'triangle',vol:.12})},
+  place(col,k){const f=gemNote(col);S.tone(f,.4,{vol:.12,verb:.25});S.tone(f*2.01,.2,{vol:.045,verb:.2,at:.01});S.noise(.05,{filter:'highpass',freq:2500,vol:.05});S.tone(140+k*8,.08,{to:70,vol:.08})},
+  lines(n,big){const m=3+n*2+(big?3:0);for(let i=0;i<m;i++){const f=S.note(523.25,PENTA,i);S.tone(f,.5,{vol:.09,verb:.45,at:i*.055,pan:(i%2?.3:-.3)});S.tone(f*2,.25,{vol:.03,verb:.4,at:i*.055})}
+    S.noise(.45,{filter:'highpass',freq:3500,to:7000,vol:.07,verb:.3})},
+  rocks(k){S.noise(.28,{filter:'lowpass',freq:900,to:150,vol:.3});S.tone(95,.22,{to:45,vol:.22});if(k>1)S.noise(.18,{filter:'bandpass',freq:500,q:1.5,vol:.15,at:.07})},
+  tnt(){S.noise(.6,{filter:'highpass',freq:2500,to:6000,vol:.05,at:.25});S.tone(784,.25,{type:'square',vol:.03,at:.25});S.tone(1046.5,.35,{type:'square',vol:.03,at:.36})},
+  boom(){S.noise(1.1,{filter:'lowpass',freq:1800,to:55,q:.7,vol:.5,verb:.35});S.tone(85,.8,{to:28,vol:.4});S.noise(.35,{filter:'highpass',freq:1800,vol:.12,at:.06,verb:.3})},
+  allRocks(){[0,2,4,7].forEach((n,i)=>S.tone(S.note(392,PENTA,n),.6,{type:'triangle',vol:.07,verb:.5,at:.25+i*.09}))},
+  boardClear(){for(let i=0;i<14;i++)S.tone(S.note(261.63,PENTA,i),.9,{vol:.08,verb:.6,at:.3+i*.045,pan:Math.sin(i)*.5});
+    [0,5,10].forEach(n=>S.tone(S.note(130.81,PENTA,n),2,{type:'triangle',vol:.07,verb:.6,attack:.05,at:.3}))},
+  newGem(){[7,9,12].forEach((n,i)=>S.pluck(S.note(440,PENTA,n),1.2,{bright:.5,vol:.13,verb:.5,at:1.1+i*.12}))},
+  grow(){S.noise(.14,{filter:'bandpass',freq:320,q:2,vol:.09});S.noise(.08,{filter:'bandpass',freq:700,q:3,vol:.05,at:.06})},
+  over(){[4,2,0,-3].forEach((n,i)=>S.tone(S.note(220,PENTA,n),.7,{type:'triangle',vol:.1,verb:.5,at:.15+i*.22}))},
+}:new Proxy({},{get:()=>()=>{}});
+if(S){
+  S.button($('sound'));
+  // the cave: a slow low drone, water dripping, and a few soft kalimba notes wandering on the scale
+  let walk=5;
+  S.music({beat:.5,step(i,at){
+    if(i%16===0){S.tone(55,10,{vol:.07,attack:3,at,bus:'music'});S.tone(82.41,10,{vol:.04,attack:3,at:at+.5,bus:'music'})}
+    if(Math.random()<.1)S.tone(1500+Math.random()*900,.14,{to:650,vol:.04,verb:.9,at:at+Math.random()*.3,bus:'music'});
+    if(i%2===0&&Math.random()<.5){walk=Math.max(0,Math.min(10,walk+[-2,-1,-1,1,1,2][Math.random()*6|0]));
+      S.pluck(S.note(220,PENTA,walk),1.8,{bright:.3,damp:.994,vol:.11,verb:.55,at,bus:'music'})}
+    if(i%32===24)S.pluck(S.note(110,PENTA,0),2.5,{bright:.25,vol:.1,verb:.5,at,bus:'music'});
+  }});
+}else $('sound').hidden=true;
+
 function randPiece(d,onlySmall){
   let pool;if(onlySmall)pool=SMALL;else{const x=Math.random()*(d.small+d.med+d.big);pool=x<d.small?SMALL:x<d.small+d.med?MED:BIG}
   return{cells:pick(pool),col:rnd(kinds())}}
@@ -354,13 +388,13 @@ function say(t){G.msgs.push(t)}
 
 function place(ti,r0,c0){
   const p=G.tray[ti];G.tray[ti]=null;G.msgs=[];
-  const popped=[],cracksBefore=countCracks();let cleared=false,heals=0;
+  const popped=[],cracksBefore=countCracks(),freshBefore=G.fresh.length,stageBefore=G.stage;let cleared=false,heals=0,lineN=0,monoN=0;
   if(p.bomb){
     let k=0;
     for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){const r=r0+dr,c=c0+dc;
       if(r<0||c<0||r>=N||c>=N)continue;const v=G.board[r][c];if(v){k++;if(v.crack)heals++}G.board[r][c]=null;popped.push({r,c})}
-    G.score+=k*SCORE.blast;say('KABOOM!');cleared=k>0;
-  }else{p.cells.forEach(([dr,dc])=>G.board[r0+dr][c0+dc]={col:p.col});G.score+=p.cells.length*SCORE.block}
+    G.score+=k*SCORE.blast;say('KABOOM!');cleared=k>0;SFX.boom();
+  }else{p.cells.forEach(([dr,dc])=>G.board[r0+dr][c0+dc]={col:p.col});G.score+=p.cells.length*SCORE.block;SFX.place(p.col,p.cells.length)}
   const {rows,cols}=findLines(G.board),n=rows.length+cols.length;
   if(n){
     cleared=true;
@@ -375,16 +409,21 @@ function place(ti,r0,c0){
     if(lineHeals)G.score+=lineHeals*SCORE.heal;
     if(n>1)say(n>3?'Amazing!':n>2?'Great!':'Nice!');
     if(mono){G.score+=mono*SCORE.mono;G.bombs+=mono;say(`All ${NAMES[monoCol]}! TNT ready`)}
+    lineN=n;monoN=mono;
   }
   if(heals&&cracksBefore>0&&countCracks()===0){G.score+=SCORE.allHealed;say('No rocks left!')}
   if(cleared&&boardEmpty()){G.score+=SCORE.boardClear;say('BOARD CLEAR!');G.big=true;
     G.stage++;if(G.stage<COLORS.length)say(`New gem: ${NAMES[G.stage]}!`);if(G.stage===1)say('Watch out, rocks are coming')}
   const d=diff();
   if(d.t>G.tier){G.tier=d.t;G.spreadIn=Math.min(G.spreadIn,d.spread);G.seedIn=Math.min(G.seedIn,G.stage===1&&!countCracks()?4:d.seed)}
+  if(lineN)SFX.lines(lineN,G.big);if(monoN)SFX.tnt();if(heals)SFX.rocks(heals);
+  if(heals&&cracksBefore>0&&countCracks()===0)SFX.allRocks();
+  if(G.big)SFX.boardClear();if(G.stage>stageBefore&&G.stage<COLORS.length)SFX.newGem();
   G.turn++;
   // rocks hold still while a clean-sweep set is in the tray, so they can't spoil it
   if(!G.sweep){if(--G.spreadIn<=0){spreadCrack();G.spreadIn=d.spread}
   if(--G.seedIn<=0){seedCrack();G.seedIn=d.seed}}
+  if(G.fresh.length>freshBefore)SFX.grow();
   if(G.tray.every(x=>!x)){G.sweep=false;G.tray=deal();G.goal=fairGoal(filled(flat(G.board)))}
   while(G.bombs>0){const i=G.tray.findIndex(q=>q&&!q.bomb);if(i<0)break;G.tray[i]={cells:[[0,0]],bomb:true};G.bombs--}
   if(G.score>best){best=G.score;if(!hashBest)try{localStorage.setItem('cc-best',best)}catch(e){}}
@@ -442,7 +481,7 @@ function buildTray(){
     if(p){const pc=pieceEl(p,'mini');if(!fitsAnywhere(p))s.classList.add('nofit');
       s.addEventListener('pointerdown',e=>startDrag(e,i,s));s.append(pc)}
     trayEl.append(s)})}
-function checkOver(){if(!G.tray.some(p=>p&&fitsAnywhere(p))){G.over=true;toHost('over',G.score);render()}}
+function checkOver(){if(!G.tray.some(p=>p&&fitsAnywhere(p))){G.over=true;toHost('over',G.score);render();SFX.over();if(S)S.play(false)}}
 
 let prev=[];
 function clearPreview(){prev.forEach(el=>el.classList.remove('preview','willclear','blast'));prev=[]}
@@ -461,7 +500,7 @@ function startDrag(e,i,slot){
   if(G.over||drag||!G.tray[i])return;e.preventDefault();
   const p=G.tray[i],ghost=pieceEl(p,'cell');ghost.classList.add('ghost');document.body.append(ghost);
   const gr=ghost.getBoundingClientRect(),br=boardEl.getBoundingClientRect();
-  drag={i,p,ghost,slot,pid:e.pointerId,touch:e.pointerType!=='mouse',target:null,gw:gr.width,gh:gr.height,bx:br.left,by:br.top,ex:e.clientX,ey:e.clientY,raf:0};slot.classList.add('lifting');
+  SFX.lift();drag={i,p,ghost,slot,pid:e.pointerId,touch:e.pointerType!=='mouse',target:null,gw:gr.width,gh:gr.height,bx:br.left,by:br.top,ex:e.clientX,ey:e.clientY,raf:0};slot.classList.add('lifting');
   addEventListener('pointermove',moveDrag,{passive:true});addEventListener('pointerup',endDrag);addEventListener('pointercancel',endDrag);
   follow()}
 function moveDrag(e){
@@ -479,7 +518,7 @@ function endDrag(e){
   removeEventListener('pointermove',moveDrag);removeEventListener('pointerup',endDrag);removeEventListener('pointercancel',endDrag);
   if(e.type==='pointerup'){drag.ex=e.clientX;drag.ey=e.clientY;follow()}
   const d=drag;drag=null;cancelAnimationFrame(d.raf);d.ghost.remove();clearPreview();d.slot.classList.remove('lifting');
-  if(d.target&&e.type==='pointerup')place(d.i,d.target[0],d.target[1])}
+  if(d.target&&e.type==='pointerup')place(d.i,d.target[0],d.target[1]);else SFX.miss()}
 
 function layout(){
   const w=Math.min($('app').clientWidth,440);
@@ -500,7 +539,7 @@ function newGame(){
   G={stage:0,score:0};const d=diff();
   G={stage:0,board:grid(),tray:[],score:0,turn:0,tier:0,over:false,bombs:0,msg:'',msgAt:0,msgs:[],fresh:[],big:false,spreadIn:d.spread,seedIn:d.seed};
   G.tray=deal();G.goal=fairGoal(filled(flat(G.board)));
-  render();buildTray()}
+  render();buildTray();if(S)S.play(true)}
 $('again').onclick=newGame;$('restart').onclick=newGame;
 setInterval(()=>{if(G&&G.msg&&performance.now()-G.msgAt>3000)hud()},500);
 // slow embers drifting up through the torch light

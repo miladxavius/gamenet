@@ -36,6 +36,7 @@ body { background: radial-gradient(120% 70% at 50% 0%, #1a1530 0%, var(--bg) 60%
 #stage { position: relative; display: grid; place-items: center; touch-action: none; user-select: none; -webkit-user-select: none; min-height: 0; }
 canvas { display: block; }
 button { font: 12px var(--f-display); letter-spacing: .05em; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+#sound { padding: 0; width: 36px; height: 34px; display: grid; place-items: center; }
 button:focus-visible { outline: 2px solid var(--saffron); outline-offset: 2px; }
 #overlay[hidden] { display: none; }
 #overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(8, 10, 22, .62); }
@@ -56,7 +57,7 @@ button:focus-visible { outline: 2px solid var(--saffron); outline-offset: 2px; }
   <div class="hud">
     <div>Score<b id="score">0</b></div>
     <div class="mid"><span>Next</span><canvas id="next" width="46" height="46"></canvas></div>
-    <div style="display:flex;align-items:center;gap:12px"><div style="text-align:right">Best<b id="best">0</b></div><button id="pause" type="button">Pause</button></div>
+    <div style="display:flex;align-items:center;gap:12px"><div style="text-align:right">Best<b id="best">0</b></div><button id="sound" type="button" aria-label="Sound"></button><button id="pause" type="button">Pause</button></div>
   </div>
   <div id="stage">
     <canvas id="board"></canvas>
@@ -65,6 +66,7 @@ button:focus-visible { outline: 2px solid var(--saffron); outline-offset: 2px; }
   </div>
 </div>
 
+<script src="../../js/sound.js?v=1"></script>
 <script>
 (() => {
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
@@ -394,6 +396,40 @@ function readBest() { try { return +localStorage.getItem('carpet-loom-best') || 
 function saveBest(v) { try { localStorage.setItem('carpet-loom-best', v); } catch (e) {} }
 // Inside Game Net the page runs in a frame: it reports the score to the hub and takes the hub's best from the link.
 const HOSTED = window.parent !== window, hashBest = /best=(\d+)/.exec(location.hash);
+// sound: shuttle ticks, a wool thud as a piece settles, a carpet roll whoosh, camel bells, and dutar music
+const S = window.GameSound, MODE = [0, 2, 3, 5, 7, 9, 10], A3 = 220;
+function dutar(f, dur, o = {}) { S.pluck(f, dur, Object.assign({ bright: .55, damp: .995, vol: .13, verb: .2 }, o)); }
+let lastTick = 0;
+const SFX = S ? {
+  move() { const t = performance.now(); if (t - lastTick < 28) return; lastTick = t; S.noise(.035, { freq: 2300, q: 5, vol: .07 }); },
+  turn() { S.noise(.03, { freq: 3200, q: 4, vol: .05 }); dutar(S.note(A3 * 2, MODE, 4), .3, { vol: .06, verb: .1 }); },
+  sink() { S.noise(.03, { freq: 900, q: 3, vol: .04 }); },
+  drop() { S.noise(.12, { freq: 500, to: 1600, q: 1, vol: .08 }); },
+  lock() { S.tone(120, .14, { to: 60, vol: .2 }); S.noise(.09, { filter: 'lowpass', freq: 520, vol: .16 }); },
+  roll(n) { S.noise(ROLL_TIME, { freq: 260, to: 1100, q: .8, vol: .1 + n * .02, attack: .08 }); S.tone(70, ROLL_TIME, { to: 140, vol: .08, attack: .1 });
+    for (let i = 0; i < n + 2; i++) dutar(S.note(A3, MODE, [0, 2, 4, 7, 9, 11][i]), 1.2, { vol: .1, at: .05 + i * .07 }); },
+  bell(big) { [1318.5, 1975.5].forEach((f, i) => { S.tone(f, big ? 1.4 : .9, { vol: .06, verb: .5, at: i * .11 }); S.tone(f * 2.76, .3, { vol: .015, verb: .5, at: i * .11 }); }); },
+  five() { for (let i = 0; i < 8; i++) S.tone(S.note(A3 * 4, MODE, i), .5, { type: 'triangle', vol: .05, verb: .5, at: .2 + i * .05, pan: i % 2 ? .4 : -.4 }); },
+  level() { [0, 2, 4, 7].forEach((n, i) => dutar(S.note(A3, MODE, n), .9, { vol: .12, at: .6 + i * .11 })); },
+  over() { [7, 5, 4, 2, 0].forEach((n, i) => dutar(S.note(A3 / 2, MODE, n), 1.4, { vol: .13, at: i * .22 })); S.tone(60, 1, { to: 40, vol: .15, at: .9 }); },
+} : new Proxy({}, { get: () => () => {} });
+if (S) {
+  S.button(document.getElementById('sound'));
+  // a Turkmen-style dutar tune: a rocking two-string drone, a melody that walks the mode in short runs, and a soft frame drum, 12 steps a bar
+  let phrase = [], pi = 0;
+  const RUNS = [[4, 3, 2, 1, 0], [0, 2, 4, 3, 2], [7, 6, 4, 4, 3, 2], [2, 3, 4, 2, 1, 0], [4, 4, 5, 4, 3], [9, 7, 6, 4, 3, 2, 1, 0]];
+  S.music({ beat: .14, step(i, at) {
+    const k = i % 12, bar = (i / 12 | 0) % 4, root = bar === 2 ? 3 : 0;
+    if (k === 0 || k === 6) { S.pluck(S.note(A3 / 2, MODE, root), 1.1, { bright: .45, vol: .08, verb: .15, at, bus: 'music' }); S.pluck(S.note(A3 / 2, MODE, root + 3), 1.1, { bright: .45, vol: .06, verb: .15, at: at + .01, bus: 'music' }); }
+    if (k === 3 || k === 9) S.pluck(S.note(A3 / 2, MODE, root + 4), .6, { bright: .45, vol: .045, at, bus: 'music' });
+    if (k === 0) { S.tone(82, .25, { to: 55, vol: .14, at, bus: 'music' }); }
+    if (k === 6 || k === 8) S.noise(.05, { freq: 1500, q: 1.5, vol: .05, at, bus: 'music' });
+    if (k % 2 === 0 || pi < phrase.length) {
+      if (pi >= phrase.length) { if (k !== 0) return; phrase = Math.random() < .2 ? [] : RUNS[Math.random() * RUNS.length | 0]; pi = 0; }
+      if (pi < phrase.length) dutar(S.note(A3, MODE, phrase[pi++] + root), .9, { vol: .07, verb: .25, at, bus: 'music' });
+    }
+  } });
+} else document.getElementById('sound').hidden = true;
 function toHost(type, score) { if (HOSTED) try { parent.postMessage({ gamenet: type, score }, '*'); } catch (e) {} }
 let best = hashBest ? +hashBest[1] : readBest();   // on Game Net the best belongs to the logged-in player, not this phone
 const fmt = n => n.toLocaleString('en-US');
@@ -428,7 +464,7 @@ function newGame() {
   ids = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
   meds = []; bag = []; queue = []; score = 0; lines = 0; level = 1; pieceId = 0; anim = null;
   for (let i = 0; i < 3; i++) queue.push(draw());
-  spawn(); state = 'play'; overlay.hidden = true; updateHud();
+  spawn(); state = 'play'; overlay.hidden = true; updateHud(); if (S) S.play(true);
 }
 function draw() {
   if (!bag.length) { bag = PIECES.map((_, i) => i); for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; } }
@@ -446,19 +482,19 @@ function collides(cells, x, y) {
 }
 function onGround() { return collides(cur.cells, cur.x, cur.y + 1); }
 function afterMove() { if (onGround() && lockMoves < 15) { lockT = 0; lockMoves++; } }
-function move(dx) { if (state !== 'play' || anim) return; if (!collides(cur.cells, cur.x + dx, cur.y)) { cur.x += dx; afterMove(); } }
+function move(dx) { if (state !== 'play' || anim) return; if (!collides(cur.cells, cur.x + dx, cur.y)) { cur.x += dx; afterMove(); SFX.move(); } }
 function rotate(dir = 1) {
   if (state !== 'play' || anim || cur.k === 'E') return;
   const n = cur.n, cells = cur.cells.map(([x, y]) => dir > 0 ? [n - 1 - y, x] : [y, n - 1 - x]);
   for (const [kx, ky] of [[0,0],[-1,0],[1,0],[0,-1],[-2,0],[2,0],[1,-1],[-1,-1]]) {
-    if (!collides(cells, cur.x + kx, cur.y + ky)) { cur.cells = cells; cur.x += kx; cur.y += ky; afterMove(); return; }
+    if (!collides(cells, cur.x + kx, cur.y + ky)) { cur.cells = cells; cur.x += kx; cur.y += ky; afterMove(); SFX.turn(); return; }
   }
 }
-function softDrop() { if (state !== 'play' || anim) return; if (!onGround()) { cur.y++; score += 1; fallT = 0; updateHud(); } }
+function softDrop() { if (state !== 'play' || anim) return; if (!onGround()) { cur.y++; score += 1; fallT = 0; updateHud(); SFX.sink(); } }
 function hardDrop() {
   if (state !== 'play' || anim) return;
   let d = 0; while (!collides(cur.cells, cur.x, cur.y + 1)) { cur.y++; d++; }
-  score += d * 2; lock();
+  score += d * 2; if (d) SFX.drop(); lock();
 }
 function ghostY() { let y = cur.y; while (!collides(cur.cells, cur.x, y + 1)) y++; return y; }
 
@@ -467,7 +503,8 @@ function lock() {
   cur.cells.forEach(([cx, cy]) => { grid[cur.y + cy][cur.x + cx] = cur.k; ids[cur.y + cy][cur.x + cx] = cur.id; });
   const before = meds.length;
   findMedallions();
-  if (meds.length > before) toast('Medallion');
+  SFX.lock();
+  if (meds.length > before) { toast('Medallion'); SFX.bell(false); }
   const full = [];
   for (let y = 0; y < ROWS; y++) if (grid[y].every(Boolean)) full.push(y);
   if (full.length) startClear(full); else spawn();
@@ -499,8 +536,9 @@ function startClear(full) {
   const fiveRows = full.filter(y => gold[y]).length;
   const n = full.length;
   score += [0, 100, 300, 500, 800][n] * level + medHit * 250 * level + fiveRows * 200 * level;
-  lines += n; level = 1 + Math.floor(lines / 10);
+  const lv = level; lines += n; level = 1 + Math.floor(lines / 10);
   if (fiveRows) toast('Five tribes'); else if (medHit) toast('Medallion rolled');
+  SFX.roll(n); if (medHit) SFX.bell(true); if (fiveRows) SFX.five(); if (level > lv) SFX.level();
   anim = { full, imgs, gold, t: 0 };
   cur = null; updateHud();
 }
@@ -515,7 +553,7 @@ function finishClear() {
 }
 
 function gameOver() {
-  state = 'over'; cur = null;
+  state = 'over'; cur = null; SFX.over(); if (S) S.play(false);
   if (score > best) { best = score; saveBest(best); }
   updateHud(); toHost('over', score);
   overlay.innerHTML = `<div class="card"><div class="eyebrow">The carpet is finished</div><div class="big">${fmt(score)}</div><p class="muted">Best ${fmt(best)}</p><button id="again" type="button">Weave again</button></div>`;
@@ -625,8 +663,8 @@ stage.addEventListener('pointercancel', () => { tp = null; });
 /* pause */
 const pauseBtn = document.getElementById('pause');
 function togglePause() {
-  if (state === 'play') { state = 'paused'; pauseBtn.textContent = 'Resume'; overlay.innerHTML = '<div class="card"><div class="big">Paused</div></div>'; overlay.hidden = false; }
-  else if (state === 'paused') { state = 'play'; pauseBtn.textContent = 'Pause'; overlay.hidden = true; }
+  if (state === 'play') { state = 'paused'; if (S) S.play(false); pauseBtn.textContent = 'Resume'; overlay.innerHTML = '<div class="card"><div class="big">Paused</div></div>'; overlay.hidden = false; }
+  else if (state === 'paused') { state = 'play'; if (S) S.play(true); pauseBtn.textContent = 'Pause'; overlay.hidden = true; }
 }
 pauseBtn.addEventListener('click', togglePause);
 document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') togglePause(); });
