@@ -34,8 +34,8 @@ const GAMES = [
   },
   {
     id: 'ghalibaf',
-    title: 'قالیباف',
-    rtl: true,
+    title: 'Gurbanguly Berdimuhamedow (Arkadag)',
+    rtl: false,
     blurb: 'Weave a Turkmen carpet from falling guls. Every full row rolls up and is carried off the loom.',
     create: createGhalibaf,
     thumb: drawGhalibafThumb,
