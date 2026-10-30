@@ -20,16 +20,16 @@ function createGhalibaf(canvas, hooks) {
   };
 }
 
-// Card picture: the flag of Turkmenistan
+// Card picture: a painting of the Turkmenistan flag waving at night
 function drawGhalibafThumb(cv) {
   const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
   cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d);
   const c = cv.getContext('2d');
-  const img = drawGhalibafThumb.img || (drawGhalibafThumb.img = Object.assign(new Image(), { src: 'games/ghalibaf/flag.jpg' }));
+  const img = drawGhalibafThumb.img || (drawGhalibafThumb.img = Object.assign(new Image(), { src: 'games/ghalibaf/card.jpg' }));
   const paint = () => {
     const s = Math.max(cv.width / img.width, cv.height / img.height);
     c.drawImage(img, (cv.width - img.width * s) / 2, (cv.height - img.height * s) / 2, img.width * s, img.height * s);
   };
-  c.fillStyle = '#0aa04a'; c.fillRect(0, 0, cv.width, cv.height);
+  c.fillStyle = '#141a40'; c.fillRect(0, 0, cv.width, cv.height);
   if (img.complete && img.naturalWidth) paint(); else img.addEventListener('load', paint, { once: true });
 }
