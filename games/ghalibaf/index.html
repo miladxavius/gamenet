@@ -6,12 +6,12 @@
 <title>Gurbanguly Berdimuhamedow (Arkadag)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500&family=Vazirmatn:wght@900&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500&display=swap">
 <style>
 [hidden] { display: none !important; }
 html, body { margin: 0; }
 :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: border-box; height: 100%; }
-/* Layout: one-screen phone game; HUD strip, the loom fills the middle, a control hint below. */
+/* Layout: one-screen phone game; HUD strip on top, the loom fills the rest. */
 :root {
   --bg: #0c1020;
   --panel: #141a36;
@@ -26,8 +26,10 @@ html, body { margin: 0; }
   color-scheme: dark;
 }
 html, body { height: 100%; }
+html, body, * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+body { touch-action: manipulation; }
 body { background: radial-gradient(120% 70% at 50% 0%, #1a1530 0%, var(--bg) 60%); background-color: var(--bg); color: var(--fg); font: 14px/1.5 var(--f-body); overflow: hidden; }
-.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 6px; padding-block: 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 560px; margin: 0 auto; box-sizing: border-box; }
+.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; padding-block: 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 560px; margin: 0 auto; box-sizing: border-box; }
 .hud { display: flex; justify-content: space-between; align-items: center; gap: 10px; font: 11px var(--f-display); color: var(--muted); letter-spacing: .06em; }
 .hud b { display: block; font: 20px var(--f-display); color: var(--fg); font-variant-numeric: tabular-nums; letter-spacing: 0; }
 .hud .mid { display: flex; align-items: center; gap: 10px; }
@@ -35,18 +37,13 @@ body { background: radial-gradient(120% 70% at 50% 0%, #1a1530 0%, var(--bg) 60%
 canvas { display: block; }
 button { font: 12px var(--f-display); letter-spacing: .05em; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
 button:focus-visible { outline: 2px solid var(--saffron); outline-offset: 2px; }
-.hint { text-align: center; color: var(--muted); font-size: 12px; }
-.hint b { color: var(--saffron); font-weight: 500; }
 #overlay[hidden] { display: none; }
 #overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(8, 10, 22, .62); }
 .card { background: linear-gradient(180deg, #1c1838, #120f26); border: 1px solid #4a2a2e; border-radius: 16px; padding: 18px 20px 20px; display: grid; gap: 10px; justify-items: center; text-align: center; width: min(320px, 86%); box-shadow: 0 20px 50px rgba(0,0,0,.5); }
-.card .title { font: 22px/1.2 var(--f-display); color: var(--fg); text-wrap: balance; }
-.card .title span { display: block; margin-top: 4px; font-size: 16px; color: var(--saffron); }
 .card .big { font: 30px var(--f-display); }
 .card .eyebrow { font: 11px var(--f-display); letter-spacing: .1em; color: var(--saffron); }
 .card .muted { color: var(--muted); margin: 0; }
 .card button { font-size: 15px; padding: 11px 28px; background: #8e1d27; border-color: #c4434b; }
-#art { width: 100%; height: auto; max-width: 280px; }
 #toast { position: absolute; top: 18%; left: 50%; transform: translate(-50%, 0); font: 18px var(--f-display); color: var(--gold); text-shadow: 0 2px 0 #3a1410, 0 0 18px rgba(255, 207, 90, .5); opacity: 0; pointer-events: none; white-space: nowrap; }
 #toast.show { animation: toast 1.2s ease-out; }
 @keyframes toast { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.9); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -14px); } }
@@ -64,15 +61,8 @@ button:focus-visible { outline: 2px solid var(--saffron); outline-offset: 2px; }
   <div id="stage">
     <canvas id="board"></canvas>
     <div id="toast"></div>
-    <div id="overlay">
-      <div class="card">
-        <canvas id="art"></canvas>
-        <div class="title">Gurbanguly Berdimuhamedow<span>(Arkadag)</span></div>
-        <button id="start" type="button">Play</button>
-      </div>
-    </div>
+    <div id="overlay" hidden></div>
   </div>
-  <div class="hint"><b>Drag</b> to move · <b>Tap</b> to turn · <b>Flick down</b> to drop · keys: arrows, space</div>
 </div>
 
 <script>
@@ -601,7 +591,6 @@ function tick(now) {
 
 /* input: keyboard */
 addEventListener('keydown', e => {
-  if (state === 'ready' && (e.key === ' ' || e.key === 'Enter')) { newGame(); e.preventDefault(); return; }
   if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { togglePause(); return; }
   if (state !== 'play') return;
   const map = { ArrowLeft: () => move(-1), ArrowRight: () => move(1), ArrowDown: softDrop, ArrowUp: () => rotate(1), x: () => rotate(1), z: () => rotate(-1), ' ': hardDrop };
@@ -646,103 +635,11 @@ addEventListener('pagehide', () => { if ((state === 'play' || state === 'paused'
 /* boot */
 layout();
 addEventListener('resize', layout);
-grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null)); ids = grid.map(r => r.map(() => 0)); meds = []; score = 0; queue = [PIECES.length - 1]; state = 'ready';
-drawNext(); updateHud();
-document.getElementById('start').addEventListener('click', newGame);
+newGame();
 requestAnimationFrame(tick);
 // test hook for automated checks
 window.__loom = { get state() { return { grid, meds, score, lines, level, state, cur, anim }; }, setGrid(rows) { grid = rows.map(r => [...r].map(c => c === '.' ? null : c)); ids = grid.map((r, y) => r.map((c, x) => c ? 1000 + y * COLS + x : 0)); findMedallions(); }, setPiece(i) { cur = null; queue[0] = i; spawn(); }, move, rotate, hardDrop };
 
-/* ---------- start-card art: a man rolled up in a carpet, panicking ---------- */
-function drawArt(cv) {
-  const W = 300, H = 220, a = makeCanvas(cv, W, H);
-  cv.style.width = '100%'; cv.style.height = 'auto';
-  // backdrop
-  const bgG = a.createRadialGradient(150, 120, 10, 150, 120, 190);
-  bgG.addColorStop(0, '#3a2440'); bgG.addColorStop(1, '#120f26');
-  a.fillStyle = bgG; a.fillRect(0, 0, W, H);
-  a.strokeStyle = 'rgba(255,207,90,.12)'; a.lineWidth = 3;
-  for (let i = 0; i < 16; i++) { const t = i / 16 * Math.PI * 2; a.beginPath(); a.moveTo(98 + Math.cos(t) * 60, 92 + Math.sin(t) * 60); a.lineTo(98 + Math.cos(t) * 170, 92 + Math.sin(t) * 170); a.stroke(); }
-  // floor shadow
-  a.fillStyle = 'rgba(0,0,0,.35)'; a.beginPath(); a.ellipse(160, 190, 120, 14, 0, 0, 7); a.fill();
-
-  a.save(); a.translate(150, 140); a.rotate(-.12);
-  const L = 166, R = 38, x0 = -66;
-  // the roll body, wrapped with Teke knots
-  a.save(); a.beginPath(); a.rect(x0, -R, L, 2 * R); a.clip();
-  const cs = 2 * R / 2.6;
-  for (let y = -R - cs; y < R; y += cs) for (let x = x0, i = 0; x < x0 + L; x += cs, i++) a.drawImage(sprite(i % 3 === 1 ? 'C' : 'T', Math.round(cs), i), x, y + (i % 2) * cs * .5, cs, cs);
-  const sh = a.createLinearGradient(0, -R, 0, R);
-  sh.addColorStop(0, 'rgba(0,0,0,.55)'); sh.addColorStop(.25, 'rgba(255,240,215,.18)'); sh.addColorStop(.45, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,.7)');
-  a.fillStyle = sh; a.fillRect(x0, -R, L, 2 * R);
-  a.restore();
-  // carpet border stripes near each end
-  [x0 + 14, x0 + L - 18].forEach(x => { a.fillStyle = '#6e141d'; a.fillRect(x, -R, 8, 2 * R); a.fillStyle = '#ecdcb6'; for (let y = -R + 4; y < R; y += 9) a.fillRect(x + 2.5, y, 3, 3); });
-  // far-end spiral cap
-  a.fillStyle = '#4a1a20'; a.beginPath(); a.ellipse(x0 + L, 0, 13, R, 0, 0, 7); a.fill();
-  a.strokeStyle = 'rgba(236,220,182,.5)'; a.lineWidth = 1.2;
-  for (let k = R - 5; k > 6; k -= 6) { a.beginPath(); a.ellipse(x0 + L + (R - k) * .05, 0, k * .34, k, 0, 0, 7); a.stroke(); }
-  // kicking feet out of the far end
-  [[-1, .5], [1, -.35]].forEach(([s, rot]) => {
-    a.save(); a.translate(x0 + L + 4, s * 13); a.rotate(rot);
-    a.fillStyle = '#2b2f4a'; a.fillRect(-4, -7, 26, 14);
-    a.fillStyle = '#1a1a1a'; a.beginPath(); a.ellipse(30, 0, 14, 9, 0, 0, 7); a.fill();
-    a.fillStyle = 'rgba(255,255,255,.25)'; a.beginPath(); a.ellipse(33, -3, 6, 2.5, 0, 0, 7); a.fill();
-    a.restore();
-  });
-  a.strokeStyle = 'rgba(241,232,212,.55)'; a.lineWidth = 2.5; a.lineCap = 'round';
-  [[132, -40, 142, -52], [140, -22, 154, -28], [138, 34, 150, 44]].forEach(([q, w, e, r]) => { a.beginPath(); a.moveTo(q, w); a.lineTo(e, r); a.stroke(); });
-  // tassels at the near end
-  a.strokeStyle = '#e8d9b4'; a.lineWidth = 1.6;
-  for (let y = -R + 4; y < R; y += 6) { a.beginPath(); a.moveTo(x0, y); a.quadraticCurveTo(x0 - 6, y + 3, x0 - 10, y + 6 + Math.sin(y) * 2); a.stroke(); }
-  // opening at the near end
-  a.fillStyle = '#1a0a0e'; a.beginPath(); a.ellipse(x0, 0, 13, R, 0, 0, 7); a.fill();
-  a.restore();
-
-  // the head, popping out of the near end
-  a.save(); a.translate(84, 134); a.rotate(-.18);
-  const skin = '#e8b08a', skinD = '#c98a66';
-  // hair tuft, standing up in fright
-  a.fillStyle = '#1e1a1c';
-  for (let i = -3; i <= 3; i++) { a.save(); a.rotate(i * .28); a.beginPath(); a.moveTo(-7, -30); a.quadraticCurveTo(0, -56 - Math.abs(i % 2) * 6, 6, -30); a.fill(); a.restore(); }
-  // ears
-  a.fillStyle = skinD; a.beginPath(); a.ellipse(-31, 2, 7, 10, 0, 0, 7); a.fill(); a.beginPath(); a.ellipse(31, 2, 7, 10, 0, 0, 7); a.fill();
-  // face
-  const fg = a.createRadialGradient(-8, -10, 4, 0, 0, 40);
-  fg.addColorStop(0, '#f4c6a2'); fg.addColorStop(1, skin);
-  a.fillStyle = fg; a.beginPath(); a.ellipse(0, 0, 32, 36, 0, 0, 7); a.fill();
-  a.fillStyle = '#1e1a1c'; a.beginPath(); a.ellipse(0, -28, 26, 10, 0, Math.PI, 0); a.fill();
-  // worried brows
-  a.strokeStyle = '#1e1a1c'; a.lineWidth = 4; a.lineCap = 'round';
-  a.beginPath(); a.moveTo(-20, -14); a.lineTo(-6, -21); a.stroke(); a.beginPath(); a.moveTo(20, -14); a.lineTo(6, -21); a.stroke();
-  // wide eyes with tiny pupils
-  [[-12, -6], [12, -6]].forEach(([x, y]) => {
-    a.fillStyle = '#fff'; a.beginPath(); a.ellipse(x, y, 9, 10, 0, 0, 7); a.fill();
-    a.strokeStyle = '#1e1a1c'; a.lineWidth = 1.5; a.stroke();
-    a.fillStyle = '#1e1a1c'; a.beginPath(); a.arc(x + (x < 0 ? 2 : -2), y + 1, 2.4, 0, 7); a.fill();
-  });
-  // screaming mouth
-  a.fillStyle = '#5a1018'; a.beginPath(); a.ellipse(0, 18, 12, 14, 0, 0, 7); a.fill();
-  a.fillStyle = '#f5efe6'; a.fillRect(-8, 5.5, 16, 4);
-  a.fillStyle = '#d4545f'; a.beginPath(); a.ellipse(0, 26, 7, 4.5, 0, 0, 7); a.fill();
-  // cheeks, sweat and tears
-  a.fillStyle = 'rgba(214,84,95,.35)'; a.beginPath(); a.arc(-21, 9, 6, 0, 7); a.fill(); a.beginPath(); a.arc(21, 9, 6, 0, 7); a.fill();
-  a.fillStyle = '#8fd3ff';
-  [[33, -22, 1], [-36, -16, .8], [24, -34, .7]].forEach(([x, y, s]) => { a.beginPath(); a.moveTo(x, y - 9 * s); a.quadraticCurveTo(x + 6 * s, y, x, y + 4 * s); a.quadraticCurveTo(x - 6 * s, y, x, y - 9 * s); a.fill(); });
-  a.strokeStyle = 'rgba(143,211,255,.8)'; a.lineWidth = 2.5;
-  a.beginPath(); a.moveTo(-14, 4); a.quadraticCurveTo(-17, 14, -14, 22); a.stroke();
-  a.beginPath(); a.moveTo(14, 4); a.quadraticCurveTo(17, 14, 14, 22); a.stroke();
-  a.restore();
-  // shout burst
-  a.save(); a.translate(48, 54); a.rotate(-.2);
-  fillP(a, star(9, 30, 19), '#ffcf5a'); fillP(a, star(9, 25, 15), '#fff3d0');
-  a.fillStyle = '#8e1d27'; a.font = '24px Bungee, Impact, sans-serif'; a.textAlign = 'center'; a.textBaseline = 'middle'; a.fillText('!!', 0, 2);
-  a.restore();
-  a.strokeStyle = 'rgba(255,207,90,.7)'; a.lineWidth = 3; a.lineCap = 'round';
-  [[18, 120, 6, 124], [22, 104, 8, 98], [30, 140, 18, 150]].forEach(([q, w, e, r]) => { a.beginPath(); a.moveTo(q, w); a.lineTo(e, r); a.stroke(); });
-}
-drawArt(document.getElementById('art'));
-if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => drawArt(document.getElementById('art')));
 
 })();
 </script>

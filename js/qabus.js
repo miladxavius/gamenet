@@ -20,16 +20,16 @@ function createQabus(canvas, hooks) {
   };
 }
 
-// Card picture: the Gonbad-e Qabus tower
+// Card picture: a painting of the Gonbad-e Qabus tower at dusk
 function drawQabusThumb(cv) {
   const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
   cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d);
   const c = cv.getContext('2d');
-  const img = drawQabusThumb.img || (drawQabusThumb.img = Object.assign(new Image(), { src: 'games/qabus/thumb.jpg' }));
+  const img = drawQabusThumb.img || (drawQabusThumb.img = Object.assign(new Image(), { src: 'games/qabus/card.jpg' }));
   const paint = () => {
     const s = Math.max(cv.width / img.width, cv.height / img.height);
     c.drawImage(img, (cv.width - img.width * s) / 2, (cv.height - img.height * s) / 2, img.width * s, img.height * s);
   };
-  c.fillStyle = '#c9d3c4'; c.fillRect(0, 0, cv.width, cv.height);
+  c.fillStyle = '#1b1a46'; c.fillRect(0, 0, cv.width, cv.height);
   if (img.complete && img.naturalWidth) paint(); else img.addEventListener('load', paint, { once: true });
 }
