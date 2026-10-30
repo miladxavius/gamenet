@@ -2,7 +2,8 @@
 // The page reports the score by message; whatever it reached is saved when the round ends or the player leaves.
 function createBaran(canvas, hooks) {
   const frame = document.createElement('iframe');
-  frame.src = 'games/baran/index.html?v=1#best=' + (hooks.getBest() || 0);
+  const p = hooks.player || {};
+  frame.src = 'games/baran/index.html?v=2#' + new URLSearchParams({ best: hooks.getBest() || 0, tag: p.tag || '', face: p.face || '', bg: p.bg || '' });
   frame.title = canvas.getAttribute('aria-label') || 'Game';
   frame.className = 'game-frame';
   frame.addEventListener('load', () => { try { frame.contentWindow.focus(); } catch (e) {} });   // keys work without a click first
@@ -11,6 +12,7 @@ function createBaran(canvas, hooks) {
   function save(score) { if (score > saved) { saved = score; hooks.onGameOver(score); } }
   function onMessage(e) {
     if (e.source !== frame.contentWindow || !e.data || typeof e.data.score !== 'number') return;
+    if (e.data.gamenet === 'exit') { save(Math.max(0, Math.floor(e.data.score))); if (hooks.exit) hooks.exit(); return; }
     const score = Math.max(0, Math.floor(e.data.score));
     if (e.data.gamenet === 'score') last = score;
     if (e.data.gamenet === 'over') { save(score); last = 0; saved = 0; }
@@ -22,7 +24,7 @@ function createBaran(canvas, hooks) {
   };
 }
 
-// Card picture: Mammad jumping into a rice sack under the moon, with Golnar waiting at the talar
+// Card picture: Mammad jumping into a rice sack under the moon, with Golnar waiting at the alachiq
 function drawBaranThumb(cv) {
   const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
   cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d);
