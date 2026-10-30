@@ -395,7 +395,7 @@ function saveBest(v) { try { localStorage.setItem('carpet-loom-best', v); } catc
 // Inside Game Net the page runs in a frame: it reports the score to the hub and takes the hub's best from the link.
 const HOSTED = window.parent !== window, hashBest = /best=(\d+)/.exec(location.hash);
 function toHost(type, score) { if (HOSTED) try { parent.postMessage({ gamenet: type, score }, '*'); } catch (e) {} }
-let best = Math.max(readBest(), hashBest ? +hashBest[1] : 0);
+let best = hashBest ? +hashBest[1] : readBest();   // on Game Net the best belongs to the logged-in player, not this phone
 const fmt = n => n.toLocaleString('en-US');
 
 function layout() {

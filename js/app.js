@@ -236,6 +236,7 @@ function renderDash() {
 // ---------- Leaderboard ----------
 async function refreshBoards() {
   if (!online) return;
+  await pendingSave;             // a score that is still being saved should show up in this refresh
   await Promise.all(GAMES.map(async g => {
     const { data, error } = await sb.from('scores')
       .select('best, player_id, players(tag, avatar)')
@@ -307,13 +308,25 @@ function stopGame() {
 $('playBack').addEventListener('click', stopGame);
 window.addEventListener('keydown', e => { if (e.key === 'Escape' && current) stopGame(); });
 
-async function submitScore(g, score) {
+// The database caps scores at 99999 until supabase/03-bigger-scores.sql is run; a bigger score is then saved as the cap.
+const OLD_SCORE_CAP = 99999;
+let pendingSave = Promise.resolve();
+function submitScore(g, score) {
   if (score <= bestOf(g)) return;
   me.best = Object.assign({}, me.best, { [g.id]: score });
   if (!online) { saveLocal(); return; }
-  const { error } = await sb.from('scores').upsert({ player_id: myId, game: g.id, best: score, updated_at: new Date().toISOString() });
-  if (error) saveLocal();
+  const row = best => ({ player_id: myId, game: g.id, best, updated_at: new Date().toISOString() });
+  pendingSave = pendingSave.then(async () => {
+    let { error } = await sb.from('scores').upsert(row(score));
+    if (error && score > OLD_SCORE_CAP) ({ error } = await sb.from('scores').upsert(row(OLD_SCORE_CAP)));
+    if (error) saveLocal();
+  }).catch(() => saveLocal());
 }
+
+// Phones often leave a game by going to the home screen, not by pressing "← Games": save the score reached so far.
+function flushGame() { if (current && current.flush) current.flush(); }
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushGame(); });
+window.addEventListener('pagehide', flushGame);
 
 // Keep the dashboard fresh while it's open
 setInterval(() => { if (!document.hidden && !current && (view === 'dash' || view === 'board')) refreshBoards(); }, 30000);

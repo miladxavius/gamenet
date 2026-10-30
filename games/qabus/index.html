@@ -294,7 +294,7 @@ function tap(e){
 }
 if (window.PointerEvent) document.addEventListener('pointerdown', tap, {passive:false});
 else document.addEventListener('touchstart', tap, {passive:false});
-addEventListener('keydown', e => { if (e.code === 'Space' || e.code === 'Enter') tap(e); });
+addEventListener('keydown', e => { if ((e.code === 'Space' || e.code === 'Enter') && !e.repeat) tap(e); });   // holding the key drops one slab, not a stream
 // leaving mid-round still counts the score
 addEventListener('pagehide', () => { if (state === 'playing' && score > 0) toHost('over', score); });
 
