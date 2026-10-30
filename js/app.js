@@ -26,7 +26,7 @@ const GAMES = [
   },
   {
     id: 'qabus',
-    title: 'قابوس ابن وشمگیر',
+    title: 'قابوس بن وشمگیر',
     rtl: true,
     blurb: 'Stack brick and tile slabs into a tower. Whatever hangs over the edge is cut off, and perfect drops help the tower grow back.',
     create: createQabus,
