@@ -24,6 +24,14 @@ const GAMES = [
     create: createGohar,
     thumb: drawGoharThumb,
   },
+  {
+    id: 'qabus',
+    title: 'قابوس ابن وشمگیر',
+    rtl: true,
+    blurb: 'Stack brick and tile slabs into a tower. Whatever hangs over the edge is cut off, and perfect drops help the tower grow back.',
+    create: createQabus,
+    thumb: drawQabusThumb,
+  },
 ];
 
 const $ = id => document.getElementById(id);
