@@ -112,7 +112,7 @@ header h1{background:linear-gradient(180deg,#fff3b0 0%,#ffc94a 45%,#ff8a1f 100%)
   </div>
 </dialog>
 
-<script src="../../js/sound.js?v=1"></script>
+<script src="../../js/sound.js?v=2"></script>
 <script>
 (function(){
 const N=8;
@@ -312,36 +312,27 @@ const boardEl=$('board'),trayEl=$('tray'),cellEls=[];
 for(let i=0;i<N*N;i++){const d=div('cell');boardEl.append(d);cellEls.push(d)}
 const cellEl=(r,c)=>cellEls[r*N+c];
 
-// sound: glassy gem clinks tuned to a minor pentatonic, stone crunches, a TNT boom, and quiet cave music
+// sound: soft gem clinks tuned to a minor pentatonic, muffled stone crunches and a soft TNT boom. No music.
 const S=window.GameSound,PENTA=[0,3,5,7,10];
 const gemNote=(col,k=0)=>S.note(440,PENTA,col+k);
 const SFX=S?{
-  lift(){S.noise(.05,{freq:900,q:2,vol:.1});S.tone(520,.06,{type:'triangle',vol:.05})},
-  miss(){S.tone(170,.16,{to:90,type:'triangle',vol:.12})},
-  place(col,k){const f=gemNote(col);S.tone(f,.4,{vol:.12,verb:.25});S.tone(f*2.01,.2,{vol:.045,verb:.2,at:.01});S.noise(.05,{filter:'highpass',freq:2500,vol:.05});S.tone(140+k*8,.08,{to:70,vol:.08})},
-  lines(n,big){const m=3+n*2+(big?3:0);for(let i=0;i<m;i++){const f=S.note(523.25,PENTA,i);S.tone(f,.5,{vol:.09,verb:.45,at:i*.055,pan:(i%2?.3:-.3)});S.tone(f*2,.25,{vol:.03,verb:.4,at:i*.055})}
-    S.noise(.45,{filter:'highpass',freq:3500,to:7000,vol:.07,verb:.3})},
-  rocks(k){S.noise(.28,{filter:'lowpass',freq:900,to:150,vol:.3});S.tone(95,.22,{to:45,vol:.22});if(k>1)S.noise(.18,{filter:'bandpass',freq:500,q:1.5,vol:.15,at:.07})},
-  tnt(){S.noise(.6,{filter:'highpass',freq:2500,to:6000,vol:.05,at:.25});S.tone(784,.25,{type:'square',vol:.03,at:.25});S.tone(1046.5,.35,{type:'square',vol:.03,at:.36})},
-  boom(){S.noise(1.1,{filter:'lowpass',freq:1800,to:55,q:.7,vol:.5,verb:.35});S.tone(85,.8,{to:28,vol:.4});S.noise(.35,{filter:'highpass',freq:1800,vol:.12,at:.06,verb:.3})},
-  allRocks(){[0,2,4,7].forEach((n,i)=>S.tone(S.note(392,PENTA,n),.6,{type:'triangle',vol:.07,verb:.5,at:.25+i*.09}))},
-  boardClear(){for(let i=0;i<14;i++)S.tone(S.note(261.63,PENTA,i),.9,{vol:.08,verb:.6,at:.3+i*.045,pan:Math.sin(i)*.5});
-    [0,5,10].forEach(n=>S.tone(S.note(130.81,PENTA,n),2,{type:'triangle',vol:.07,verb:.6,attack:.05,at:.3}))},
+  lift(){S.tone(440,.08,{vol:.04})},
+  miss(){S.tone(170,.18,{to:100,vol:.08})},
+  place(col,k){const f=gemNote(col);S.tone(f,.45,{vol:.09,verb:.25});S.tone(f*2.01,.25,{vol:.025,verb:.2,at:.01});S.tone(140+k*8,.1,{to:80,vol:.07})},
+  lines(n,big){const m=3+n*2+(big?3:0);for(let i=0;i<m;i++){const f=S.note(523.25,PENTA,i);S.tone(f,.6,{vol:.06,verb:.45,at:i*.06,pan:(i%2?.3:-.3)})}
+    S.noise(.5,{freq:1500,to:2200,q:.7,vol:.025,verb:.3})},
+  rocks(k){S.noise(.3,{filter:'lowpass',freq:700,to:150,vol:.18});S.tone(95,.25,{to:50,vol:.14});if(k>1)S.noise(.2,{filter:'lowpass',freq:500,vol:.1,at:.07})},
+  tnt(){S.tone(587,.3,{vol:.05,at:.25});S.tone(784,.4,{vol:.05,at:.36})},
+  boom(){S.noise(1.1,{filter:'lowpass',freq:900,to:55,q:.5,vol:.3,attack:.03,verb:.3});S.tone(85,.8,{to:30,vol:.25,attack:.02})},
+  allRocks(){[0,2,4,7].forEach((n,i)=>S.tone(S.note(392,PENTA,n),.6,{vol:.06,verb:.5,at:.25+i*.09}))},
+  boardClear(){for(let i=0;i<14;i++)S.tone(S.note(261.63,PENTA,i),.9,{vol:.055,verb:.6,at:.3+i*.06,pan:Math.sin(i)*.5});
+    [0,5,10].forEach(n=>S.tone(S.note(130.81,PENTA,n),2,{vol:.06,verb:.6,attack:.1,at:.3}))},
   newGem(){[7,9,12].forEach((n,i)=>S.pluck(S.note(440,PENTA,n),1.2,{bright:.5,vol:.13,verb:.5,at:1.1+i*.12}))},
-  grow(){S.noise(.14,{filter:'bandpass',freq:320,q:2,vol:.09});S.noise(.08,{filter:'bandpass',freq:700,q:3,vol:.05,at:.06})},
-  over(){[4,2,0,-3].forEach((n,i)=>S.tone(S.note(220,PENTA,n),.7,{type:'triangle',vol:.1,verb:.5,at:.15+i*.22}))},
+  grow(){S.noise(.16,{filter:'lowpass',freq:400,vol:.07})},
+  over(){[4,2,0,-3].forEach((n,i)=>S.tone(S.note(220,PENTA,n),.8,{vol:.08,verb:.5,at:.15+i*.25}))},
 }:new Proxy({},{get:()=>()=>{}});
 if(S){
   S.button($('sound'));
-  // the cave: a slow low drone, water dripping, and a few soft kalimba notes wandering on the scale
-  let walk=5;
-  S.music({beat:.5,step(i,at){
-    if(i%16===0){S.tone(55,10,{vol:.07,attack:3,at,bus:'music'});S.tone(82.41,10,{vol:.04,attack:3,at:at+.5,bus:'music'})}
-    if(Math.random()<.1)S.tone(1500+Math.random()*900,.14,{to:650,vol:.04,verb:.9,at:at+Math.random()*.3,bus:'music'});
-    if(i%2===0&&Math.random()<.5){walk=Math.max(0,Math.min(10,walk+[-2,-1,-1,1,1,2][Math.random()*6|0]));
-      S.pluck(S.note(220,PENTA,walk),1.8,{bright:.3,damp:.994,vol:.11,verb:.55,at,bus:'music'})}
-    if(i%32===24)S.pluck(S.note(110,PENTA,0),2.5,{bright:.25,vol:.1,verb:.5,at,bus:'music'});
-  }});
 }else $('sound').hidden=true;
 
 function randPiece(d,onlySmall){
@@ -481,7 +472,7 @@ function buildTray(){
     if(p){const pc=pieceEl(p,'mini');if(!fitsAnywhere(p))s.classList.add('nofit');
       s.addEventListener('pointerdown',e=>startDrag(e,i,s));s.append(pc)}
     trayEl.append(s)})}
-function checkOver(){if(!G.tray.some(p=>p&&fitsAnywhere(p))){G.over=true;toHost('over',G.score);render();SFX.over();if(S)S.play(false)}}
+function checkOver(){if(!G.tray.some(p=>p&&fitsAnywhere(p))){G.over=true;toHost('over',G.score);render();SFX.over()}}
 
 let prev=[];
 function clearPreview(){prev.forEach(el=>el.classList.remove('preview','willclear','blast'));prev=[]}
@@ -539,7 +530,7 @@ function newGame(){
   G={stage:0,score:0};const d=diff();
   G={stage:0,board:grid(),tray:[],score:0,turn:0,tier:0,over:false,bombs:0,msg:'',msgAt:0,msgs:[],fresh:[],big:false,spreadIn:d.spread,seedIn:d.seed};
   G.tray=deal();G.goal=fairGoal(filled(flat(G.board)));
-  render();buildTray();if(S)S.play(true)}
+  render();buildTray()}
 $('again').onclick=newGame;$('restart').onclick=newGame;
 setInterval(()=>{if(G&&G.msg&&performance.now()-G.msgAt>3000)hud()},500);
 // slow embers drifting up through the torch light

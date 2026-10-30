@@ -386,7 +386,11 @@ const Snd = (() => {
     try {
       if (!ctx) {
         const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-        ctx = new AC(); master = ctx.createGain(); master.gain.value = on ? .8 : 0; master.connect(ctx.destination);
+        ctx = new AC(); master = ctx.createGain(); master.gain.value = on ? .7 : 0;
+        // everything passes a gentle low-pass and a compressor so nothing is shrill or harsh (Milad: keep it mellow)
+        const soft = ctx.createBiquadFilter(), comp = ctx.createDynamicsCompressor();
+        soft.type = 'lowpass'; soft.frequency.value = 2800; soft.Q.value = .5; comp.threshold.value = -20; comp.ratio.value = 5;
+        master.connect(soft); soft.connect(comp); comp.connect(ctx.destination);
         noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
         const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
         const b = ctx.createBufferSource(); b.buffer = ctx.createBuffer(1, 1, 22050); b.connect(ctx.destination); b.start(0);   // iPhone needs one sound played inside the touch
@@ -406,7 +410,7 @@ const Snd = (() => {
   }
   document.addEventListener('visibilitychange', () => { if (!ctx) return; if (document.hidden) ctx.suspend(); else if (on) ctx.resume(); });
   const now = () => ctx.currentTime;
-  function env(g, t, a, peak, dur) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); }
+  function env(g, t, a, peak, dur) { a = Math.max(a, .015); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); }
   function tone(freq, dur, type = 'sine', vol = .3, opt = {}) {
     if (!ctx || !on) return;
     const t = now() + (opt.delay || 0), o = ctx.createOscillator(), g = ctx.createGain();
@@ -427,10 +431,10 @@ const Snd = (() => {
     env(g, t, opt.a || .005, vol, dur);
     s.connect(f); f.connect(g); g.connect(master); s.start(t, Math.random() * .5); s.stop(t + dur + .05);
   }
-  // a quiet engine hum that follows the Peykan's speed
+  // a soft, low engine hum that follows the Peykan's speed: two round sine waves under a low-pass, no buzz
   function startEngine() {
     const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-    o1.type = 'sawtooth'; o2.type = 'square'; o2.detune.value = -1193; f.type = 'lowpass'; f.frequency.value = 320; g.gain.value = 0;
+    o1.type = 'sine'; o2.type = 'sine'; o2.detune.value = 1200; f.type = 'lowpass'; f.frequency.value = 300; f.Q.value = .3; g.gain.value = 0;
     o1.connect(f); o2.connect(f); f.connect(g); g.connect(master); o1.start(); o2.start();
     engine = {o1, o2, f, g};
   }
@@ -438,25 +442,26 @@ const Snd = (() => {
     unlock,
     get on() { return on; },
     get running() { return !!ctx && ctx.state === 'running'; },
-    toggle() { on = !on; try { localStorage.setItem('gamenet-sound', on ? 'all' : 'off'); } catch (e) {} if (master) master.gain.value = on ? .8 : 0; return on; },
+    toggle() { on = !on; try { localStorage.setItem('gamenet-sound', on ? 'all' : 'off'); } catch (e) {} if (master) master.gain.value = on ? .7 : 0; return on; },
     engine(speed, running) {
       if (!engine) return;
-      const t = now(), f = 38 + speed * 3.2;
-      engine.o1.frequency.setTargetAtTime(f, t, .15); engine.o2.frequency.setTargetAtTime(f, t, .15);
-      engine.f.frequency.setTargetAtTime(220 + speed * 22, t, .2);
-      engine.g.gain.setTargetAtTime(running ? .05 + speed * .0035 : 0, t, .3);
+      // pitched high enough for a phone speaker to carry, but round and low-passed so it purrs instead of buzzing
+      const t = now(), f = 70 + speed * 2;
+      engine.o1.frequency.setTargetAtTime(f, t, .4); engine.o2.frequency.setTargetAtTime(f, t, .4);
+      engine.f.frequency.setTargetAtTime(260 + speed * 8, t, .5);
+      engine.g.gain.setTargetAtTime(running ? .03 + speed * .001 : 0, t, .5);
     },
-    honk() { for (const [f, d] of [[415, 0], [523, 6]]) tone(f, .28, 'square', .1, {a: .015, lp: 1800, detune: d}); },          // the Peykan's flat two-note horn
-    angry() { for (const [f, d] of [[311, 0], [370, -8]]) tone(f, .5, 'sawtooth', .07, {a: .02, lp: 1300, detune: d, delay: .12}); },  // another driver honks back
-    tick(hi) { tone(hi ? 2300 : 1700, .03, 'square', .07, {lp: 3000}); noise(.025, .06, {type: 'highpass', f: 3000}); },   // blinker tick-tock
-    swish() { noise(.22, .12, {type: 'bandpass', f: 600, fTo: 2400, q: .8, a: .04}); },
-    pass() { noise(.35, .05, {type: 'bandpass', f: 1400, fTo: 400, q: .7, a: .08}); },
-    crash() { noise(.5, .5, {f: 900, fTo: 120}); tone(90, .35, 'sine', .5, {to: 40}); for (let k = 0; k < 6; k++) tone(2600 + Math.random() * 2200, .12, 'triangle', .05, {delay: .05 + k * .04}); },
-    brake() { noise(.6, .07, {type: 'bandpass', f: 3200, q: 6, a: .05}); },
-    fuel() { [880, 1175, 1568].forEach((f, k) => tone(f, .16, 'triangle', .14, {delay: k * .07})); },
-    sign() { [784, 988].forEach((f, k) => tone(f, .35, 'sine', .14, {delay: k * .12})); },
-    low() { tone(1046, .12, 'square', .06, {lp: 2500}); tone(1046, .12, 'square', .06, {lp: 2500, delay: .18}); },
-    over() { [392, 330, 262, 196].forEach((f, k) => tone(f, .28, 'triangle', .16, {delay: k * .16})); },
+    honk() { for (const [f, d] of [[415, 0], [523, 6]]) tone(f, .3, 'triangle', .08, {a: .02, lp: 1000, detune: d}); },          // the Peykan's flat two-note horn
+    angry() { for (const [f, d] of [[311, 0], [370, -8]]) tone(f, .45, 'triangle', .05, {a: .03, lp: 900, detune: d, delay: .12}); },  // another driver honks back
+    tick(hi) { tone(hi ? 880 : 740, .06, 'sine', .035); },   // blinker tick-tock
+    swish() { noise(.25, .06, {f: 500, fTo: 1200, a: .06}); },
+    pass() { noise(.4, .035, {f: 900, fTo: 300, a: .1}); },
+    crash() { noise(.5, .25, {f: 600, fTo: 120, a: .02}); tone(90, .4, 'sine', .25, {to: 45}); },
+    brake() { noise(.5, .035, {f: 700, fTo: 300, a: .08}); },
+    fuel() { [523, 659, 784].forEach((f, k) => tone(f, .3, 'sine', .08, {delay: k * .08})); },
+    sign() { [523, 659].forEach((f, k) => tone(f, .45, 'sine', .08, {delay: k * .14})); },
+    low() { tone(587, .2, 'sine', .05); tone(587, .2, 'sine', .05, {delay: .25}); },
+    over() { [392, 330, 262, 196].forEach((f, k) => tone(f, .4, 'sine', .1, {delay: k * .2})); },
   };
 })();
 

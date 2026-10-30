@@ -35,18 +35,19 @@ function createFirefly(canvas, hooks) {
       const o = audio.createOscillator(), g = audio.createGain();
       o.type = type; o.frequency.setValueAtTime(freq, t);
       if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
-      g.gain.setValueAtTime(vol, t);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.015);   // soft start, no click
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      o.connect(g).connect(audio.destination);
+      const f = audio.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2400;   // keep it mellow
+      o.connect(g).connect(f).connect(audio.destination);
       o.start(t); o.stop(t + dur);
     } catch (e) {}
   }
   const sfx = {
-    flap:  () => beep(520, 0.09, 'triangle', 0.07, 260),
-    point: () => { beep(880, 0.08, 'sine', 0.08); setTimeout(() => beep(1320, 0.1, 'sine', 0.07), 70); },
-    dew:   () => { beep(660, 0.1, 'sine', 0.09, 600); setTimeout(() => beep(1500, 0.15, 'sine', 0.05), 90); },
-    hit:   () => beep(220, 0.4, 'sawtooth', 0.1, -170),
-    fade:  () => beep(400, 0.8, 'sine', 0.1, -330),
+    flap:  () => beep(440, 0.1, 'sine', 0.05, 160),
+    point: () => { beep(660, 0.12, 'sine', 0.06); setTimeout(() => beep(880, 0.14, 'sine', 0.05), 70); },
+    dew:   () => { beep(587, 0.14, 'sine', 0.06, 300); setTimeout(() => beep(988, 0.2, 'sine', 0.04), 90); },
+    hit:   () => beep(200, 0.45, 'sine', 0.09, -120),
+    fade:  () => beep(400, 0.8, 'sine', 0.08, -300),
   };
 
   // ---------- Best score ----------

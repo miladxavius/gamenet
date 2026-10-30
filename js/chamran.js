@@ -2,7 +2,7 @@
 // The page reports the score by message; whatever it reached is saved when the round ends or the player leaves.
 function createChamran(canvas, hooks) {
   const frame = document.createElement('iframe');
-  frame.src = 'games/chamran/index.html?v=11#best=' + (hooks.getBest() || 0);
+  frame.src = 'games/chamran/index.html?v=12#best=' + (hooks.getBest() || 0);
   frame.title = canvas.getAttribute('aria-label') || 'Game';
   frame.className = 'game-frame';
   frame.addEventListener('load', () => { try { frame.contentWindow.focus(); } catch (e) {} });   // keys work without a click first
