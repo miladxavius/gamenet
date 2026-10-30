@@ -764,7 +764,7 @@ function showTitle() {
   if (unlocked > 1) btns = LEVELS.slice(0, unlocked).map((L, i) => `<button class="btn${i ? '' : ' ghost'}" data-l="${i}">LEVEL ${i + 1}</button>`).join('');
   showScreen(`<div class="kicker">GAME NET · PC 06</div>
     <div class="title">پس از باران<span class="beta">BETA</span></div>
-    <div class="story">استراتوس، ابری که هیچ‌وقت بند نمیاد، باز گلنار رو با خودش برد!<br>ممد، کاته بخور، ته‌دیگ پرت کن و تا تالار آخر برو.</div>
+    <div class="story">استراتوس، ابری که هیچ‌وقت بند نمیاد، باز گلنار رو با خودش برد!<br>ممد، کته بخور، ته‌دیگ پرت کن و تا تالار آخر برو.</div>
     <div class="btns">${btns}</div>
     <div class="hint">${document.body.classList.contains('touch') ? 'Left thumb moves · right thumb jumps · jump into rice sacks · hold the phone sideways' : 'Arrows to move · Space to jump · X to throw tahdig · P to pause'}</div>`, null);
   $('screen').querySelectorAll('button[data-l]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); S.unlock(); score = 0; levelStartScore = 0; grains = 0; lives = 3; bestReported = 0; startLevel(Number(b.dataset.l)); }));
