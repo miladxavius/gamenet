@@ -2,7 +2,7 @@
 // The page reports the score by message; whatever it reached is saved when the round ends or the player leaves.
 function createGhalibaf(canvas, hooks) {
   const frame = document.createElement('iframe');
-  frame.src = 'games/ghalibaf/index.html?v=8#best=' + (hooks.getBest() || 0);
+  frame.src = 'games/ghalibaf/index.html?v=9#best=' + (hooks.getBest() || 0);
   frame.title = canvas.getAttribute('aria-label') || 'Game';
   frame.className = 'game-frame';
   frame.addEventListener('load', () => { try { frame.contentWindow.focus(); } catch (e) {} });   // keys work without a click first
@@ -27,7 +27,7 @@ function drawGhalibafThumb(cv) {
   const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
   cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d);
   const c = cv.getContext('2d');
-  const img = drawGhalibafThumb.img || (drawGhalibafThumb.img = Object.assign(new Image(), { src: 'games/ghalibaf/card.jpg' }));
+  const img = drawGhalibafThumb.img || (drawGhalibafThumb.img = Object.assign(new Image(), { src: 'games/ghalibaf/card2.jpg' }));
   const paint = () => {
     const s = Math.max(cv.width / img.width, cv.height / img.height);
     c.drawImage(img, (cv.width - img.width * s) / 2, (cv.height - img.height * s) / 2, img.width * s, img.height * s);
