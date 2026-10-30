@@ -52,7 +52,8 @@ const GAMES = [
     id: 'baran',
     title: 'پس از باران Beta',
     rtl: true,
-    blurb: 'Run and jump across the north of Iran as Mammad. Eat kateh to grow, throw tahdig, and reach Golnar at the talar before Stratus rains on you. Beta with Levels 1 and 2.',
+    blurb: 'Run and jump across the north of Iran as Mammad. Eat kateh to grow, throw tahdig, and reach Golnar at the alachiq before Stratus rains on you. Beta with Levels 1 to 5.',
+    immersive: true,   // the game shows the gamertag and the way back itself, so the site's bar is hidden
     create: createBaran,
     thumb: drawBaranThumb,
   },
@@ -300,6 +301,7 @@ function startGame(g) {
   const stage = $('stage');
   stage.textContent = '';
   $('play').hidden = false;
+  $('play').classList.toggle('immersive', !!g.immersive);
   document.body.classList.add('playing');
   paintAvatar($('playAv'), me.avatar);
   $('playTag').textContent = me.tag;
@@ -310,6 +312,8 @@ function startGame(g) {
   current = g.create(canvas, {
     getBest: () => bestOf(g),
     onGameOver: score => submitScore(g, score),
+    player: { tag: me.tag, face: avatarOf(me.avatar)[0], bg: avatarOf(me.avatar)[1] },
+    exit: () => stopGame(),
   });
 }
 
@@ -322,6 +326,9 @@ function stopGame() {
   refreshBoards();
 }
 $('playBack').addEventListener('click', stopGame);
+// while a game is open, two thumbs on the screen must not pinch-zoom the page
+document.addEventListener('touchmove', e => { if (current && e.touches.length > 1 && e.cancelable) e.preventDefault(); }, { passive: false });
+document.addEventListener('gesturestart', e => { if (current) e.preventDefault(); });
 window.addEventListener('keydown', e => { if (e.key === 'Escape' && current) stopGame(); });
 
 // The database caps scores at 99999 until supabase/03-bigger-scores.sql is run; a bigger score is then saved as the cap.
