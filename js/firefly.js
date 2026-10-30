@@ -30,6 +30,7 @@ function createFirefly(canvas, hooks) {
   function beep(freq, dur, type = 'sine', vol = 0.12, slide = 0) {
     try {
       if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.state === 'suspended') audio.resume();   // iPhones start sound paused
       const t = audio.currentTime;
       const o = audio.createOscillator(), g = audio.createGain();
       o.type = type; o.frequency.setValueAtTime(freq, t);
@@ -364,7 +365,7 @@ function createFirefly(canvas, hooks) {
   // ---------- Loop ----------
   let last = performance.now();
   function frame(now) {
-    const dt = Math.min(0.033, (now - last) / 1000);
+    const dt = Math.max(0, Math.min(0.033, (now - last) / 1000));
     last = now;
     update(dt);
     draw();

@@ -491,8 +491,9 @@ addEventListener('resize',layout);layout();
 
 const info=$('info');
 $('infoBtn').onclick=()=>{try{info.showModal()}catch(e){info.setAttribute('open','')}};
-$('closeInfo').onclick=()=>info.close();
-info.addEventListener('click',e=>{if(e.target===info)info.close()});
+const closeInfo=()=>info.close?info.close():info.removeAttribute('open');
+$('closeInfo').onclick=closeInfo;
+info.addEventListener('click',e=>{if(e.target===info)closeInfo()});
 
 function newGame(){
   if(G&&!G.over&&G.score>0)toHost('over',G.score);

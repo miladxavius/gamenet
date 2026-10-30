@@ -2,9 +2,10 @@
 // The page reports the score by message; whatever it reached is saved when the round ends or the player leaves.
 function createQabus(canvas, hooks) {
   const frame = document.createElement('iframe');
-  frame.src = 'games/qabus/index.html#best=' + (hooks.getBest() || 0);
+  frame.src = 'games/qabus/index.html?v=7#best=' + (hooks.getBest() || 0);
   frame.title = canvas.getAttribute('aria-label') || 'Game';
   frame.className = 'game-frame';
+  frame.addEventListener('load', () => { try { frame.contentWindow.focus(); } catch (e) {} });   // keys work without a click first
   canvas.replaceWith(frame);
   let last = 0, saved = 0;
   function save(score) { if (score > saved) { saved = score; hooks.onGameOver(score); } }
@@ -16,6 +17,7 @@ function createQabus(canvas, hooks) {
   }
   window.addEventListener('message', onMessage);
   return {
+    flush() { save(last); },   // the phone is leaving the app: keep the score reached so far
     destroy() { window.removeEventListener('message', onMessage); save(last); frame.remove(); },
   };
 }
