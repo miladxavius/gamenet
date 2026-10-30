@@ -32,6 +32,14 @@ const GAMES = [
     create: createQabus,
     thumb: drawQabusThumb,
   },
+  {
+    id: 'ghalibaf',
+    title: 'قالیباف',
+    rtl: true,
+    blurb: 'Weave a Turkmen carpet from falling guls. Every full row rolls up and is carried off the loom.',
+    create: createGhalibaf,
+    thumb: drawGhalibafThumb,
+  },
 ];
 
 const $ = id => document.getElementById(id);
