@@ -2,7 +2,7 @@
 // The page reports the score by message; whatever it reached is saved when the round ends or the player leaves.
 function createGohar(canvas, hooks) {
   const frame = document.createElement('iframe');
-  frame.src = 'games/gohar/index.html?v=8#best=' + (hooks.getBest() || 0);
+  frame.src = 'games/gohar/index.html?v=9#best=' + (hooks.getBest() || 0);
   frame.title = canvas.getAttribute('aria-label') || 'Game';
   frame.className = 'game-frame';
   frame.addEventListener('load', () => { try { frame.contentWindow.focus(); } catch (e) {} });   // keys work without a click first
