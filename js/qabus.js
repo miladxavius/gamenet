@@ -20,7 +20,7 @@ function createQabus(canvas, hooks) {
   };
 }
 
-// Card picture: the brick and tile tower on its stone base
+// Card picture: the Gonbad-e Qabus tower
 function drawQabusThumb(cv) {
   const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
   cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d);
@@ -30,6 +30,6 @@ function drawQabusThumb(cv) {
     const s = Math.max(cv.width / img.width, cv.height / img.height);
     c.drawImage(img, (cv.width - img.width * s) / 2, (cv.height - img.height * s) / 2, img.width * s, img.height * s);
   };
-  c.fillStyle = '#e9b48e'; c.fillRect(0, 0, cv.width, cv.height);
+  c.fillStyle = '#9fb3dc'; c.fillRect(0, 0, cv.width, cv.height);
   if (img.complete && img.naturalWidth) paint(); else img.addEventListener('load', paint, { once: true });
 }
