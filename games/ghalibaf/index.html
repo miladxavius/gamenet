@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>Ghalibaf</title>
+<title>Gurbanguly Berdimuhamedow (Arkadag)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500&family=Vazirmatn:wght@900&display=swap">
@@ -40,7 +40,8 @@ button:focus-visible { outline: 2px solid var(--saffron); outline-offset: 2px; }
 #overlay[hidden] { display: none; }
 #overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(8, 10, 22, .62); }
 .card { background: linear-gradient(180deg, #1c1838, #120f26); border: 1px solid #4a2a2e; border-radius: 16px; padding: 18px 20px 20px; display: grid; gap: 10px; justify-items: center; text-align: center; width: min(320px, 86%); box-shadow: 0 20px 50px rgba(0,0,0,.5); }
-.card .title { font: 900 44px/1.2 var(--f-fa); color: var(--fg); }
+.card .title { font: 22px/1.2 var(--f-display); color: var(--fg); text-wrap: balance; }
+.card .title span { display: block; margin-top: 4px; font-size: 16px; color: var(--saffron); }
 .card .big { font: 30px var(--f-display); }
 .card .eyebrow { font: 11px var(--f-display); letter-spacing: .1em; color: var(--saffron); }
 .card .muted { color: var(--muted); margin: 0; }
@@ -66,7 +67,7 @@ button:focus-visible { outline: 2px solid var(--saffron); outline-offset: 2px; }
     <div id="overlay">
       <div class="card">
         <canvas id="art"></canvas>
-        <div class="title">قالیباف</div>
+        <div class="title">Gurbanguly Berdimuhamedow<span>(Arkadag)</span></div>
         <button id="start" type="button">Play</button>
       </div>
     </div>
