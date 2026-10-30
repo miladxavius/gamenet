@@ -48,6 +48,14 @@ const GAMES = [
     create: createChamran,
     thumb: drawChamranThumb,
   },
+  {
+    id: 'baran',
+    title: 'پس از باران Beta',
+    rtl: true,
+    blurb: 'Run and jump across the north of Iran as Mammad. Eat kateh to grow, throw tahdig, and reach Golnar at the talar before Stratus rains on you. Beta with Levels 1 and 2.',
+    create: createBaran,
+    thumb: drawBaranThumb,
+  },
 ];
 
 const $ = id => document.getElementById(id);
