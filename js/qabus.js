@@ -1,4 +1,4 @@
-// قابوس ابن وشمگیر: the 3D tower game lives in its own page (games/qabus/) and runs in a frame on the stage.
+// قابوس بن وشمگیر: the 3D tower game lives in its own page (games/qabus/) and runs in a frame on the stage.
 // The page reports the score by message; whatever it reached is saved when the round ends or the player leaves.
 function createQabus(canvas, hooks) {
   const frame = document.createElement('iframe');
