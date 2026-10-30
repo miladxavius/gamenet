@@ -1,15 +1,16 @@
-// Game Net sound: effects and music are made in code with Web Audio, so there are no sound files to load.
+// Game Net sound: soft effects made in code with Web Audio, so there are no sound files to load. No music (Milad's call).
 // Phones only allow sound after a tap, so the first tap or key press anywhere in the game wakes it up.
 // iPhones also go quiet when the ring/silent switch is on silent. Asking for "playback" audio (iOS 17+),
 // or playing a silent loop on older iPhones, makes the game sound like a video does instead.
-// One setting for every game: 'all' (music and effects), 'fx' (effects only) or 'off'.
+// Everything goes through a gentle low-pass and a compressor, and buzzy waves are swapped for round ones, so nothing is shrill.
+// One setting for every game: 'all' (sound on) or 'off'.
 (function () {
-  const KEY = 'gamenet-sound', MODES = ['all', 'fx', 'off'];
+  const KEY = 'gamenet-sound';
   let mode = 'all';
-  try { const m = localStorage.getItem(KEY); if (MODES.includes(m)) mode = m; } catch (e) {}
+  try { if (localStorage.getItem(KEY) === 'off') mode = 'off'; } catch (e) {}
   const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
-  let ctx = null, master, fxBus, musicBus, verbIn, keepAlive = null;
+  let ctx = null, master, fxBus, verbIn, keepAlive = null;
   const buttons = [];
 
   function build() {
@@ -17,11 +18,11 @@
     if (!AC) return false;
     try { ctx = new AC({ latencyHint: 'interactive' }); } catch (e) { try { ctx = new AC(); } catch (e2) { return false; } }
     const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -14; comp.knee.value = 10; comp.ratio.value = 4; comp.attack.value = .003; comp.release.value = .2;
-    master = ctx.createGain(); master.gain.value = .9;
-    master.connect(comp); comp.connect(ctx.destination);
+    comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 5; comp.attack.value = .005; comp.release.value = .25;
+    const soft = ctx.createBiquadFilter(); soft.type = 'lowpass'; soft.frequency.value = 3200; soft.Q.value = .5;
+    master = ctx.createGain(); master.gain.value = .7;
+    master.connect(soft); soft.connect(comp); comp.connect(ctx.destination);
     fxBus = ctx.createGain(); fxBus.connect(master);
-    musicBus = ctx.createGain(); musicBus.gain.value = mode === 'all' && songOn ? 1 : 0; musicBus.connect(master);
     // a soft room echo shared by everything that asks for it
     const verb = ctx.createConvolver(), len = Math.floor(ctx.sampleRate * 2.2), ir = ctx.createBuffer(2, len, ctx.sampleRate);
     for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
@@ -66,18 +67,17 @@
   addEventListener('pagehide', () => { if (ctx) ctx.suspend().catch(() => {}); if (keepAlive) keepAlive.pause(); });
 
   const live = () => ctx && ctx.state === 'running' && !document.hidden;
-  const busOf = o => (o && o.bus === 'music') ? musicBus : fxBus;
 
   // envelope + optional echo send + optional pan, then on to a bus
   function chain(node, o, t, dur) {
-    const g = ctx.createGain(), vol = o.vol == null ? .2 : o.vol, a = o.attack || .004;
+    const g = ctx.createGain(), vol = o.vol == null ? .2 : o.vol, a = Math.max(.012, o.attack || 0);
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(vol, t + a);
     g.gain.exponentialRampToValueAtTime(.0001, t + dur);
     node.connect(g);
     let end = g;
     if (o.pan && ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = o.pan; g.connect(p); end = p; }
-    end.connect(busOf(o));
+    end.connect(fxBus);
     if (o.verb) { const s = ctx.createGain(); s.gain.value = o.verb; end.connect(s); s.connect(verbIn); }
   }
 
@@ -85,7 +85,7 @@
   function tone(freq, dur, o = {}) {
     if (!live()) return;
     const t = ctx.currentTime + (o.at || 0), osc = ctx.createOscillator();
-    osc.type = o.type || 'sine';
+    osc.type = o.type === 'triangle' ? 'triangle' : 'sine';   // square and sawtooth buzz, so they are never used
     osc.frequency.setValueAtTime(freq, t);
     if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t + (o.glide || dur));
     if (o.detune) osc.detune.value = o.detune;
@@ -129,55 +129,34 @@
     const t = ctx.currentTime + (o.at || 0), src = ctx.createBufferSource();
     src.buffer = stringBuf(freq, dur, o.bright == null ? .6 : o.bright, o.damp || .996);
     if (o.rate) src.playbackRate.value = o.rate;
-    chain(src, Object.assign({ attack: .001 }, o), t, dur); src.start(t); src.stop(t + dur + .05);
+    chain(src, o, t, dur); src.start(t); src.stop(t + dur + .05);
   }
 
-  // background music: a step function called for every beat a little ahead of time.
-  // music({beat:.25, step(i, at){ ... call tone/pluck/noise with {at, bus:'music'} ... }})
-  let song = null, songOn = false, nextAt = 0, beatN = 0;
-  function music(s) { song = s; beatN = 0; nextAt = 0; }
-  function play(on) {
-    songOn = !!on;
-    if (!ctx) return;
-    const t = ctx.currentTime, g = musicBus.gain, want = songOn && mode === 'all' ? 1 : 0;
-    g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(want, t + (want ? .6 : .8));
-  }
-  setInterval(() => {
-    if (!song || !songOn || mode !== 'all' || !live()) { nextAt = 0; return; }
-    const now = ctx.currentTime;
-    if (!nextAt || nextAt < now) nextAt = now + .05;
-    while (nextAt < now + .3) {
-      try { song.step(beatN, nextAt - now); } catch (e) {}
-      beatN++; nextAt += song.beat;
-    }
-  }, 60);
-
-  // speaker button: cycles music + effects → effects only → off
+  // speaker button: sound on / off
   const ICON = {
     all: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
-    fx: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
     off: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3z" fill="currentColor"/><path d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   };
-  const LABEL = { all: 'Sound: music and effects', fx: 'Sound: effects only', off: 'Sound off' };
+  const LABEL = { all: 'Sound on', off: 'Sound off' };
   function paint() { buttons.forEach(b => { b.innerHTML = ICON[mode]; b.setAttribute('aria-label', LABEL[mode]); b.title = LABEL[mode]; }); }
   function setMode(m) {
     mode = m;
     try { localStorage.setItem(KEY, m); } catch (e) {}
     if (m === 'off') { if (ctx) ctx.suspend().catch(() => {}); if (keepAlive) keepAlive.pause(); }
     else unlock();
-    play(songOn); paint();
+    paint();
   }
   function button(el) {
     buttons.push(el);
     // the games listen for taps on the whole page; a tap on this button is only for the sound
     ['pointerdown', 'touchstart', 'mousedown'].forEach(t => el.addEventListener(t, e => e.stopPropagation()));
-    el.addEventListener('click', e => { e.stopPropagation(); setMode(MODES[(MODES.indexOf(mode) + 1) % 3]); if (mode !== 'off' && ctx) ctx.resume().then(() => tone(880, .12, { vol: .12 }), () => {}); el.blur(); });
+    el.addEventListener('click', e => { e.stopPropagation(); setMode(mode === 'off' ? 'all' : 'off'); if (mode !== 'off' && ctx) ctx.resume().then(() => tone(660, .2, { vol: .08 }), () => {}); el.blur(); });
     el.addEventListener('keydown', e => e.stopPropagation());
     paint(); return el;
   }
 
   window.GameSound = {
-    tone, noise, pluck, music, play, button, unlock,
+    tone, noise, pluck, button, unlock,
     get mode() { return mode; },
     get ctx() { return ctx; },
     // pitch of scale step n (any whole number), from a base frequency and a list of semitones in one octave

@@ -66,7 +66,7 @@ button:focus-visible { outline: 2px solid var(--saffron); outline-offset: 2px; }
   </div>
 </div>
 
-<script src="../../js/sound.js?v=1"></script>
+<script src="../../js/sound.js?v=2"></script>
 <script>
 (() => {
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
@@ -396,39 +396,25 @@ function readBest() { try { return +localStorage.getItem('carpet-loom-best') || 
 function saveBest(v) { try { localStorage.setItem('carpet-loom-best', v); } catch (e) {} }
 // Inside Game Net the page runs in a frame: it reports the score to the hub and takes the hub's best from the link.
 const HOSTED = window.parent !== window, hashBest = /best=(\d+)/.exec(location.hash);
-// sound: shuttle ticks, a wool thud as a piece settles, a carpet roll whoosh, camel bells, and dutar music
+// sound: soft shuttle taps, a wool thud as a piece settles, a carpet roll whoosh, camel bells and a dutar strum. No music.
 const S = window.GameSound, MODE = [0, 2, 3, 5, 7, 9, 10], A3 = 220;
-function dutar(f, dur, o = {}) { S.pluck(f, dur, Object.assign({ bright: .55, damp: .995, vol: .13, verb: .2 }, o)); }
+function dutar(f, dur, o = {}) { S.pluck(f, dur, Object.assign({ bright: .4, damp: .995, vol: .1, verb: .2 }, o)); }
 let lastTick = 0;
 const SFX = S ? {
-  move() { const t = performance.now(); if (t - lastTick < 28) return; lastTick = t; S.noise(.035, { freq: 2300, q: 5, vol: .07 }); },
-  turn() { S.noise(.03, { freq: 3200, q: 4, vol: .05 }); dutar(S.note(A3 * 2, MODE, 4), .3, { vol: .06, verb: .1 }); },
-  sink() { S.noise(.03, { freq: 900, q: 3, vol: .04 }); },
-  drop() { S.noise(.12, { freq: 500, to: 1600, q: 1, vol: .08 }); },
-  lock() { S.tone(120, .14, { to: 60, vol: .2 }); S.noise(.09, { filter: 'lowpass', freq: 520, vol: .16 }); },
-  roll(n) { S.noise(ROLL_TIME, { freq: 260, to: 1100, q: .8, vol: .1 + n * .02, attack: .08 }); S.tone(70, ROLL_TIME, { to: 140, vol: .08, attack: .1 });
-    for (let i = 0; i < n + 2; i++) dutar(S.note(A3, MODE, [0, 2, 4, 7, 9, 11][i]), 1.2, { vol: .1, at: .05 + i * .07 }); },
-  bell(big) { [1318.5, 1975.5].forEach((f, i) => { S.tone(f, big ? 1.4 : .9, { vol: .06, verb: .5, at: i * .11 }); S.tone(f * 2.76, .3, { vol: .015, verb: .5, at: i * .11 }); }); },
-  five() { for (let i = 0; i < 8; i++) S.tone(S.note(A3 * 4, MODE, i), .5, { type: 'triangle', vol: .05, verb: .5, at: .2 + i * .05, pan: i % 2 ? .4 : -.4 }); },
-  level() { [0, 2, 4, 7].forEach((n, i) => dutar(S.note(A3, MODE, n), .9, { vol: .12, at: .6 + i * .11 })); },
-  over() { [7, 5, 4, 2, 0].forEach((n, i) => dutar(S.note(A3 / 2, MODE, n), 1.4, { vol: .13, at: i * .22 })); S.tone(60, 1, { to: 40, vol: .15, at: .9 }); },
+  move() { const t = performance.now(); if (t - lastTick < 40) return; lastTick = t; S.noise(.05, { filter: 'lowpass', freq: 900, vol: .05 }); },
+  turn() { dutar(S.note(A3 * 2, MODE, 4), .35, { vol: .05, verb: .1 }); },
+  sink() { S.noise(.04, { filter: 'lowpass', freq: 600, vol: .03 }); },
+  drop() { S.noise(.15, { filter: 'lowpass', freq: 500, to: 1100, vol: .06 }); },
+  lock() { S.tone(120, .16, { to: 65, vol: .13 }); S.noise(.1, { filter: 'lowpass', freq: 420, vol: .1 }); },
+  roll(n) { S.noise(ROLL_TIME, { filter: 'lowpass', freq: 300, to: 900, vol: .07 + n * .01, attack: .1 }); S.tone(70, ROLL_TIME, { to: 130, vol: .06, attack: .12 });
+    for (let i = 0; i < n + 2; i++) dutar(S.note(A3, MODE, [0, 2, 4, 7, 9, 11][i]), 1.2, { vol: .07, at: .05 + i * .08 }); },
+  bell(big) { [659.25, 987.75].forEach((f, i) => S.tone(f, big ? 1.4 : .9, { vol: .05, verb: .5, at: i * .12 })); },
+  five() { for (let i = 0; i < 8; i++) S.tone(S.note(A3 * 2, MODE, i), .6, { vol: .045, verb: .5, at: .2 + i * .06, pan: i % 2 ? .4 : -.4 }); },
+  level() { [0, 2, 4, 7].forEach((n, i) => dutar(S.note(A3, MODE, n), .9, { vol: .08, at: .6 + i * .11 })); },
+  over() { [7, 5, 4, 2, 0].forEach((n, i) => dutar(S.note(A3 / 2, MODE, n), 1.4, { vol: .1, at: i * .24 })); },
 } : new Proxy({}, { get: () => () => {} });
 if (S) {
   S.button(document.getElementById('sound'));
-  // a Turkmen-style dutar tune: a rocking two-string drone, a melody that walks the mode in short runs, and a soft frame drum, 12 steps a bar
-  let phrase = [], pi = 0;
-  const RUNS = [[4, 3, 2, 1, 0], [0, 2, 4, 3, 2], [7, 6, 4, 4, 3, 2], [2, 3, 4, 2, 1, 0], [4, 4, 5, 4, 3], [9, 7, 6, 4, 3, 2, 1, 0]];
-  S.music({ beat: .14, step(i, at) {
-    const k = i % 12, bar = (i / 12 | 0) % 4, root = bar === 2 ? 3 : 0;
-    if (k === 0 || k === 6) { S.pluck(S.note(A3 / 2, MODE, root), 1.1, { bright: .45, vol: .08, verb: .15, at, bus: 'music' }); S.pluck(S.note(A3 / 2, MODE, root + 3), 1.1, { bright: .45, vol: .06, verb: .15, at: at + .01, bus: 'music' }); }
-    if (k === 3 || k === 9) S.pluck(S.note(A3 / 2, MODE, root + 4), .6, { bright: .45, vol: .045, at, bus: 'music' });
-    if (k === 0) { S.tone(82, .25, { to: 55, vol: .14, at, bus: 'music' }); }
-    if (k === 6 || k === 8) S.noise(.05, { freq: 1500, q: 1.5, vol: .05, at, bus: 'music' });
-    if (k % 2 === 0 || pi < phrase.length) {
-      if (pi >= phrase.length) { if (k !== 0) return; phrase = Math.random() < .2 ? [] : RUNS[Math.random() * RUNS.length | 0]; pi = 0; }
-      if (pi < phrase.length) dutar(S.note(A3, MODE, phrase[pi++] + root), .9, { vol: .07, verb: .25, at, bus: 'music' });
-    }
-  } });
 } else document.getElementById('sound').hidden = true;
 function toHost(type, score) { if (HOSTED) try { parent.postMessage({ gamenet: type, score }, '*'); } catch (e) {} }
 let best = hashBest ? +hashBest[1] : readBest();   // on Game Net the best belongs to the logged-in player, not this phone
@@ -464,7 +450,7 @@ function newGame() {
   ids = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
   meds = []; bag = []; queue = []; score = 0; lines = 0; level = 1; pieceId = 0; anim = null;
   for (let i = 0; i < 3; i++) queue.push(draw());
-  spawn(); state = 'play'; overlay.hidden = true; updateHud(); if (S) S.play(true);
+  spawn(); state = 'play'; overlay.hidden = true; updateHud();
 }
 function draw() {
   if (!bag.length) { bag = PIECES.map((_, i) => i); for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; } }
@@ -553,7 +539,7 @@ function finishClear() {
 }
 
 function gameOver() {
-  state = 'over'; cur = null; SFX.over(); if (S) S.play(false);
+  state = 'over'; cur = null; SFX.over();
   if (score > best) { best = score; saveBest(best); }
   updateHud(); toHost('over', score);
   overlay.innerHTML = `<div class="card"><div class="eyebrow">The carpet is finished</div><div class="big">${fmt(score)}</div><p class="muted">Best ${fmt(best)}</p><button id="again" type="button">Weave again</button></div>`;
@@ -663,8 +649,8 @@ stage.addEventListener('pointercancel', () => { tp = null; });
 /* pause */
 const pauseBtn = document.getElementById('pause');
 function togglePause() {
-  if (state === 'play') { state = 'paused'; if (S) S.play(false); pauseBtn.textContent = 'Resume'; overlay.innerHTML = '<div class="card"><div class="big">Paused</div></div>'; overlay.hidden = false; }
-  else if (state === 'paused') { state = 'play'; if (S) S.play(true); pauseBtn.textContent = 'Pause'; overlay.hidden = true; }
+  if (state === 'play') { state = 'paused'; pauseBtn.textContent = 'Resume'; overlay.innerHTML = '<div class="card"><div class="big">Paused</div></div>'; overlay.hidden = false; }
+  else if (state === 'paused') { state = 'play'; pauseBtn.textContent = 'Pause'; overlay.hidden = true; }
 }
 pauseBtn.addEventListener('click', togglePause);
 document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') togglePause(); });
