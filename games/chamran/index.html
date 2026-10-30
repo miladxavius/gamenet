@@ -30,6 +30,7 @@ canvas{position:fixed;inset:0;display:block;touch-action:none}
  display:flex;align-items:center;justify-content:center;text-align:center;font:900 11px/1.2 "Nunito";letter-spacing:1.5px;box-shadow:0 6px 18px rgba(0,0,0,.5);opacity:.92}
 #honkBtn{background:radial-gradient(circle at 40% 35%,#ffe08a,#e8a33d)!important;color:#1a1630;font-size:12px!important}
 #honkBtn.on{transform:scale(.9)}
+#sndBtn{pointer-events:auto;width:40px;height:40px;border-radius:50%;border:1.5px solid rgba(255,255,255,.25);background:rgba(10,14,30,.6);color:#fff;font-size:18px;line-height:1;cursor:pointer;padding:0}
 body.over #honkBtn{display:none}
 body.braking::after{content:"BRAKING";position:fixed;left:50%;bottom:max(30px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:2;font:400 15px "Bungee";color:#ff7a6a;letter-spacing:2px;text-shadow:0 2px 8px rgba(0,0,0,.7)}
 #hint{left:50%;top:44%;transform:translate(-50%,-50%);text-align:center;background:rgba(10,14,30,.72);border-radius:20px;padding:14px 18px;font:900 14px/1.7 "Nunito";letter-spacing:1px;transition:opacity .6s;white-space:nowrap}
@@ -50,7 +51,7 @@ body.braking::after{content:"BRAKING";position:fixed;left:50%;bottom:max(30px,en
 <body>
 <div id="flash" class="ui"></div>
 <div id="tl" class="ui"><div id="score">0</div><div id="metres">METRES DRIVEN: 0</div><div id="combo">BEEP ×2</div></div>
-<div id="tr" class="ui"><div class="pillx" id="fuel">⛽ <span class="tank"><i id="fuelbar"></i></span></div><div class="pillx" id="dents">💥 ○○○</div></div>
+<div id="tr" class="ui"><div class="pillx" id="fuel">⛽ <span class="tank"><i id="fuelbar"></i></span></div><div class="pillx" id="dents">💥 ○○○</div><button id="sndBtn" type="button" aria-label="Sound on or off">🔊</button></div>
 <div id="passed" class="ui">CARS PASSED<b id="passedv">0</b></div>
 <div id="honkBtn">📣<br>HONK</div>
 <div id="hint" class="ui"><b>HOLD</b> the screen to brake<br><b>SWIPE</b> to change lane<br><b>📣</b> button to honk<br><b>⛽</b> grab fuel cards</div>
@@ -324,8 +325,10 @@ const oncoming = Array.from({length: 12}, (_, k) => { const m = randomCar({front
 const cardTex = canvasTex(256, 192, (g, w, h) => {
   const gr = g.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, w / 2); gr.addColorStop(0, 'rgba(255,220,120,.85)'); gr.addColorStop(1, 'rgba(255,200,97,0)');
   g.fillStyle = gr; g.fillRect(0, 0, w, h);
-  g.fillStyle = '#f2f2ee'; g.beginPath(); g.roundRect(38, 42, 180, 112, 14); g.fill();
-  g.fillStyle = '#1f6fb2'; g.beginPath(); g.roundRect(38, 42, 180, 34, [14, 14, 0, 0]); g.fill();
+  // canvas roundRect is missing on Safari before 16, so the corners are drawn by hand
+  const card = (x, y, w, h, r, rb) => { g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r); g.lineTo(x + w, y + h - rb); g.quadraticCurveTo(x + w, y + h, x + w - rb, y + h); g.lineTo(x + rb, y + h); g.quadraticCurveTo(x, y + h, x, y + h - rb); g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y); g.fill(); };
+  g.fillStyle = '#f2f2ee'; card(38, 42, 180, 112, 14, 14);
+  g.fillStyle = '#1f6fb2'; card(38, 42, 180, 34, 14, 0);
   g.fillStyle = '#e8a33d'; g.fillRect(52, 96, 34, 26);
   g.fillStyle = '#fff'; g.font = '900 22px Nunito, sans-serif'; g.textAlign = 'center'; g.fillText('FUEL CARD', 128, 67);
   g.font = '44px serif'; g.fillText('⛽', 170, 138);
@@ -373,15 +376,99 @@ function pop(text, x, y, z, cls = '') {
   document.body.appendChild(d); setTimeout(() => d.remove(), 950);
 }
 
+// ---------- sound ----------
+// Every sound is made live with Web Audio, so there are no files to load. Phones only allow sound after a touch,
+// so the first touch or key press switches it on. The speaker button turns it off and on.
+const Snd = (() => {
+  let ctx = null, master = null, noiseBuf = null, engine = null, on = true;
+  try { on = localStorage.getItem('gamenet-sound') !== 'off'; } catch (e) {}   // one sound setting shared by all Game Net games
+  function unlock() {
+    try {
+      if (!ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+        ctx = new AC(); master = ctx.createGain(); master.gain.value = on ? .8 : 0; master.connect(ctx.destination);
+        noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+        const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        const b = ctx.createBufferSource(); b.buffer = ctx.createBuffer(1, 1, 22050); b.connect(ctx.destination); b.start(0);   // iPhone needs one sound played inside the touch
+        // iPhone: be heard even with the silent switch on (newer phones have audioSession; older ones need a silent <audio> playing)
+        try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; else silentLoop(); } catch (e) {}
+        startEngine();
+      }
+      if (ctx.state !== 'running') ctx.resume();
+    } catch (e) {}
+  }
+  function silentLoop() {
+    const n = 800, buf = new Uint8Array(44 + n), v = new DataView(buf.buffer), w = (o, t) => [...t].forEach((c, i) => buf[o + i] = c.charCodeAt(0));
+    w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); w(36, 'data'); v.setUint32(40, n, true); buf.fill(128, 44);
+    let b = ''; buf.forEach(x => b += String.fromCharCode(x));
+    const a = new Audio('data:audio/wav;base64,' + btoa(b)); a.loop = true; a.setAttribute('playsinline', ''); const pr = a.play(); if (pr && pr.catch) pr.catch(() => {});
+  }
+  document.addEventListener('visibilitychange', () => { if (!ctx) return; if (document.hidden) ctx.suspend(); else if (on) ctx.resume(); });
+  const now = () => ctx.currentTime;
+  function env(g, t, a, peak, dur) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); }
+  function tone(freq, dur, type = 'sine', vol = .3, opt = {}) {
+    if (!ctx || !on) return;
+    const t = now() + (opt.delay || 0), o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (opt.to) o.frequency.exponentialRampToValueAtTime(opt.to, t + dur);
+    if (opt.detune) o.detune.value = opt.detune;
+    env(g, t, opt.a || .01, vol, dur);
+    let last = g;
+    if (opt.lp) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = opt.lp; g.connect(f); last = f; }
+    o.connect(g); last.connect(master); o.start(t); o.stop(t + dur + .05);
+  }
+  function noise(dur, vol = .3, opt = {}) {
+    if (!ctx || !on) return;
+    const t = now() + (opt.delay || 0), s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    s.buffer = noiseBuf; f.type = opt.type || 'lowpass'; f.frequency.setValueAtTime(opt.f || 1200, t);
+    if (opt.fTo) f.frequency.exponentialRampToValueAtTime(opt.fTo, t + dur);
+    if (opt.q) f.Q.value = opt.q;
+    env(g, t, opt.a || .005, vol, dur);
+    s.connect(f); f.connect(g); g.connect(master); s.start(t, Math.random() * .5); s.stop(t + dur + .05);
+  }
+  // a quiet engine hum that follows the Peykan's speed
+  function startEngine() {
+    const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    o1.type = 'sawtooth'; o2.type = 'square'; o2.detune.value = -1193; f.type = 'lowpass'; f.frequency.value = 320; g.gain.value = 0;
+    o1.connect(f); o2.connect(f); f.connect(g); g.connect(master); o1.start(); o2.start();
+    engine = {o1, o2, f, g};
+  }
+  return {
+    unlock,
+    get on() { return on; },
+    get running() { return !!ctx && ctx.state === 'running'; },
+    toggle() { on = !on; try { localStorage.setItem('gamenet-sound', on ? 'all' : 'off'); } catch (e) {} if (master) master.gain.value = on ? .8 : 0; return on; },
+    engine(speed, running) {
+      if (!engine) return;
+      const t = now(), f = 38 + speed * 3.2;
+      engine.o1.frequency.setTargetAtTime(f, t, .15); engine.o2.frequency.setTargetAtTime(f, t, .15);
+      engine.f.frequency.setTargetAtTime(220 + speed * 22, t, .2);
+      engine.g.gain.setTargetAtTime(running ? .05 + speed * .0035 : 0, t, .3);
+    },
+    honk() { for (const [f, d] of [[415, 0], [523, 6]]) tone(f, .28, 'square', .1, {a: .015, lp: 1800, detune: d}); },          // the Peykan's flat two-note horn
+    angry() { for (const [f, d] of [[311, 0], [370, -8]]) tone(f, .5, 'sawtooth', .07, {a: .02, lp: 1300, detune: d, delay: .12}); },  // another driver honks back
+    tick(hi) { tone(hi ? 2300 : 1700, .03, 'square', .07, {lp: 3000}); noise(.025, .06, {type: 'highpass', f: 3000}); },   // blinker tick-tock
+    swish() { noise(.22, .12, {type: 'bandpass', f: 600, fTo: 2400, q: .8, a: .04}); },
+    pass() { noise(.35, .05, {type: 'bandpass', f: 1400, fTo: 400, q: .7, a: .08}); },
+    crash() { noise(.5, .5, {f: 900, fTo: 120}); tone(90, .35, 'sine', .5, {to: 40}); for (let k = 0; k < 6; k++) tone(2600 + Math.random() * 2200, .12, 'triangle', .05, {delay: .05 + k * .04}); },
+    brake() { noise(.6, .07, {type: 'bandpass', f: 3200, q: 6, a: .05}); },
+    fuel() { [880, 1175, 1568].forEach((f, k) => tone(f, .16, 'triangle', .14, {delay: k * .07})); },
+    sign() { [784, 988].forEach((f, k) => tone(f, .35, 'sine', .14, {delay: k * .12})); },
+    low() { tone(1046, .12, 'square', .06, {lp: 2500}); tone(1046, .12, 'square', .06, {lp: 2500, delay: .18}); },
+    over() { [392, 330, 262, 196].forEach((f, k) => tone(f, .28, 'triangle', .16, {delay: k * .16})); },
+  };
+})();
+
 // ---------- actions ----------
 function changeLane(dir) {
   if (st.over) return;
   const to = st.lane + dir; if (to < 0 || to > 2) return;
-  st.fromLane = st.lane; st.lane = to; st.laneT = 0;
+  st.fromLane = st.lane; st.lane = to; st.laneT = 0; Snd.swish();
 }
 function dent(why) {
   if (st.inv > 0 || st.over) return;
-  st.dents++; st.inv = 1.4; st.combo = 0; st.shake = .4;
+  st.dents++; st.inv = 1.4; st.combo = 0; st.shake = .4; Snd.crash();
   $('flash').style.opacity = 1; setTimeout(() => $('flash').style.opacity = 0, 180);
   pop(why, st.x, 2.6, 0, 'bad');
   if (navigator.vibrate) try { navigator.vibrate(120); } catch (e) {}
@@ -389,20 +476,20 @@ function dent(why) {
 }
 function honk() {
   if (st.over || st.honkCd > 0) return;
-  st.honkCd = .35;
+  st.honkCd = .35; Snd.honk();
   pop('BEEP!', st.x + .8, 2.2, -1, 'white');
   let c = null;
   for (const o of cars) if (o.lane === st.lane && o.toLane === st.lane && o.z < 0 && -o.z < 16 && (!c || o.z > c.z)) c = o;
   if (!c) return;
   const opts = [st.lane - 1, st.lane + 1].filter(l => l >= 0 && l <= 2 && laneFree(l, c.z, c.len, c)).sort(() => Math.random() - .5);
-  if (!opts.length) { pop('BEEEP 😤', c.x, 2.8, c.z, 'bad'); return; }
+  if (!opts.length) { pop('BEEEP 😤', c.x, 2.8, c.z, 'bad'); Snd.angry(); return; }
   c.toLane = opts[0]; c.blink = .5; c.blinkSide = opts[0] < c.lane ? 'L' : 'R';
   st.combo = Math.min(st.combo + 1, 9); st.comboT = 4;
   const pts = 25 * st.combo; st.score += pts;
   pop(st.combo > 1 ? `+${pts} ×${st.combo}` : `+${pts}`, c.x, 3, c.z);
 }
 function gameOver(why) {
-  st.over = true; st.overT = 0; setBrake(false);
+  st.over = true; st.overT = 0; setBrake(false); Snd.over();
   const s = Math.floor(st.score);
   if (s > best) { best = s; try { localStorage.setItem('chamranBest', best); } catch (e) {} }
   $('why').textContent = why; $('final').textContent = s.toLocaleString('en-US');
@@ -412,26 +499,50 @@ function gameOver(why) {
   toHost('over', s);
 }
 
-// ---------- input: swipe, tap, hold ----------
+// ---------- input: hold to brake, swipe to change lane, button to honk ----------
+// Phones use touch events with preventDefault, so the page never scrolls, zooms or opens a menu under a finger.
+// A mouse uses pointer events. The first touch also switches the sound on.
 let down = null;
-const honkBtn = $('honkBtn');
-honkBtn.addEventListener('pointerdown', e => { e.stopPropagation(); if (st.over) return; honk(); honkBtn.classList.add('on'); setTimeout(() => honkBtn.classList.remove('on'), 120); });
-// Touching the screen brakes straight away; a sideways swipe changes lane instead.
-addEventListener('pointerdown', e => {
+const honkBtn = $('honkBtn'), sndBtn = $('sndBtn');
+function pressHonk(e) {
+  e.preventDefault(); e.stopPropagation(); Snd.unlock();
+  if (st.over) return;
+  honk(); honkBtn.classList.add('on'); setTimeout(() => honkBtn.classList.remove('on'), 120);
+}
+function pressSound(e) { e.preventDefault(); e.stopPropagation(); Snd.unlock(); sndBtn.textContent = Snd.toggle() ? '🔊' : '🔇'; }
+sndBtn.textContent = Snd.on ? '🔊' : '🔇';
+function startPress(x, y) {
+  Snd.unlock();
   if (st.over) { if (st.overT > .8) reset(); return; }
-  down = {x: e.clientX, y: e.clientY, swiped: false};
-  setBrake(true);
-});
-addEventListener('pointermove', e => {
+  down = {x, y, swiped: false}; setBrake(true);
+}
+function movePress(x, y) {
   if (!down || down.swiped) return;
-  const dx = e.clientX - down.x, dy = e.clientY - down.y;
-  if (Math.abs(dx) > 28 && Math.abs(dx) > Math.abs(dy)) { down.swiped = true; setBrake(false); changeLane(dx > 0 ? 1 : -1); }
-});
-const up = () => { down = null; setBrake(false); };
-addEventListener('pointerup', up); addEventListener('pointercancel', up);
-addEventListener('contextmenu', e => e.preventDefault());   // a long press brakes; it must not open a menu
-function setBrake(on) { if (st) st.braking = on; document.body.classList.toggle('braking', on); }
+  const dx = x - down.x, dy = y - down.y;
+  if (Math.abs(dx) > 26 && Math.abs(dx) > Math.abs(dy) * .8) { down.swiped = true; setBrake(false); changeLane(dx > 0 ? 1 : -1); }
+}
+function endPress() { down = null; setBrake(false); }
+const passiveNo = {passive: false};
+honkBtn.addEventListener('touchstart', pressHonk, passiveNo);
+sndBtn.addEventListener('touchstart', pressSound, passiveNo);
+document.addEventListener('touchstart', e => { e.preventDefault(); const t = e.changedTouches[0]; startPress(t.clientX, t.clientY); }, passiveNo);
+document.addEventListener('touchmove', e => { e.preventDefault(); const t = e.changedTouches[0]; movePress(t.clientX, t.clientY); }, passiveNo);
+document.addEventListener('touchend', e => { e.preventDefault(); Snd.unlock(); if (!e.touches.length) endPress(); }, passiveNo);
+document.addEventListener('touchcancel', () => endPress());
+const isMouse = e => e.pointerType === 'mouse';
+honkBtn.addEventListener('pointerdown', e => { if (isMouse(e)) pressHonk(e); });
+sndBtn.addEventListener('pointerdown', e => { if (isMouse(e)) pressSound(e); });
+document.addEventListener('pointerdown', e => { if (isMouse(e)) startPress(e.clientX, e.clientY); });
+document.addEventListener('pointermove', e => { if (isMouse(e)) movePress(e.clientX, e.clientY); });
+document.addEventListener('pointerup', e => { if (isMouse(e)) endPress(); });
+document.addEventListener('contextmenu', e => e.preventDefault());
+let skidT = 0;
+function setBrake(on) {
+  if (st) { if (on && !st.braking && st.speed > 9 && performance.now() - skidT > 700) { skidT = performance.now(); Snd.brake(); } st.braking = on; }
+  document.body.classList.toggle('braking', on);
+}
 addEventListener('keydown', e => {
+  Snd.unlock();
   if (e.repeat) return;
   if (st.over && (e.key === ' ' || e.key === 'Enter')) { if (st.overT > .8) reset(); return; }
   if (e.key === 'ArrowLeft' || e.key === 'a') changeLane(-1);
@@ -477,9 +588,10 @@ function update(dt) {
     if (c.cutIn > 0) c.cutIn -= dt;
     if (c.blink <= 0 && c.lane === c.toLane) c.blinkSide = '';
     const on = c.blink > 0 && (performance.now() / 260 | 0) % 2 === 0 ? 1 : 0;
+    if (c.blink > 0 && Math.abs(c.z) < 30) { const ph = performance.now() / 260 | 0; if (ph !== c.tickPh) { c.tickPh = ph; Snd.tick(ph % 2 === 0); } }
     c.m.blinkL.forEach(b => b.material.opacity = c.blinkSide === 'L' ? on : 0);
     c.m.blinkR.forEach(b => b.material.opacity = c.blinkSide === 'R' ? on : 0);
-    if (!c.passed && c.z > 0) { c.passed = true; st.passed++; st.score += 10; }
+    if (!c.passed && c.z > 0) { c.passed = true; st.passed++; st.score += 10; if (Math.abs(c.x - st.x) < 4) Snd.pass(); }
     else if (c.passed && c.z < -1) c.passed = false;
   }
   // Other cars never drive into each other: if two overlap, the one behind drops back.
@@ -525,7 +637,7 @@ function update(dt) {
   for (const f of [...fuelCards]) {
     f.z += move; f.t += dt; f.s.position.set(L[f.lane], 1.2 + Math.sin(f.t * 3) * .15, f.z); f.s.material.rotation = Math.sin(f.t * 2) * .12;
     if (Math.abs(L[f.lane] - st.x) < 1.4 && Math.abs(f.z) < 2.4) {
-      st.fuel = Math.min(100, st.fuel + 22); st.score += 50; st.cards++;
+      st.fuel = Math.min(100, st.fuel + 22); st.score += 50; st.cards++; Snd.fuel();
       pop('+50 ⛽', L[f.lane], 2.2, f.z); scene.remove(f.s); fuelCards.splice(fuelCards.indexOf(f), 1);
     } else if (f.z > 20) { scene.remove(f.s); fuelCards.splice(fuelCards.indexOf(f), 1); }
   }
@@ -543,11 +655,12 @@ function update(dt) {
   sign.visible = st.next - st.dist < 180;
   if (st.dist >= st.next) {
     st.checks++; st.next += 650 + st.checks * 40; st.score += 200;
-    pop('+200', st.x, 3.2, -3); signKm = Math.max(1, signKm - 1); signMin += 10; drawSign();
+    pop('+200', st.x, 3.2, -3); Snd.sign(); signKm = Math.max(1, signKm - 1); signMin += 10; drawSign();
   }
 
   st.fuel -= (1.5 + Math.min(level, 8) * .12) * dt; st.inv -= dt; st.honkCd -= dt; st.shake = Math.max(0, st.shake - dt);
   if (st.combo > 0 && (st.comboT -= dt) <= 0) st.combo = 0;
+  if (st.fuel < 20 && !st.over && (st.lowT = (st.lowT || 0) - dt) <= 0) { st.lowT = 2.5; Snd.low(); }
   if (st.fuel <= 0) { st.fuel = 0; gameOver('OUT OF PETROL ON CHAMRAN'); }
 }
 
@@ -566,6 +679,7 @@ let last = performance.now(), sentAt = 0;
 function frame(now) {
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   update(dt); hud();
+  Snd.engine(st.speed, !st.over && !document.hidden);
   if (!st.over && now - sentAt > 1000) { sentAt = now; toHost('score', Math.floor(st.score)); }
   me.g.position.set(st.x, 0, 0);
   me.g.rotation.y = -(L[st.lane] - st.x) * .08;
@@ -581,7 +695,7 @@ addEventListener('pagehide', () => { if (!st.over && st.score > 0) toHost('over'
 reset();
 window.__ok = true;
 window.__st = () => st;
-window.__test = {update, honk, changeLane, setBrake, cars: () => cars, cards: () => fuelCards, L, me};
+window.__test = {update, honk, changeLane, setBrake, cars: () => cars, cards: () => fuelCards, L, me, Snd};
 requestAnimationFrame(frame);
 </script>
 </body>

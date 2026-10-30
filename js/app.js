@@ -42,7 +42,7 @@ const GAMES = [
   },
   {
     id: 'chamran',
-    title: 'شهید چمران (شمال)',
+    title: 'چمران (شمال)',
     rtl: true,
     blurb: 'Drive your white Peykan up the Chamran expressway at rush hour. Hold to brake, honk slow cars aside and grab fuel cards before the tank runs dry. Some might call it همت شرق.',
     create: createChamran,
