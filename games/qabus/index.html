@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
 <style>
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
-html,body{margin:0;height:100%;overflow:hidden;background:#f6d9b8;font-family:system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+html,body{margin:0;height:100%;overflow:hidden;background:#f6d9b8;font-family:system-ui,-apple-system,sans-serif;touch-action:none;cursor:pointer}
 #sky{position:fixed;inset:0}
 #city{position:fixed;left:0;right:0;bottom:0;width:100%;height:34vh;transition:transform 1.2s,opacity 1.2s}
 canvas{position:fixed;inset:0;display:block;touch-action:none;z-index:1}
@@ -21,7 +21,7 @@ canvas{position:fixed;inset:0;display:block;touch-action:none;z-index:1}
 #msg{inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:16vh;text-align:center;transition:opacity .35s}
 #msg .big{font:44px/1.1 "Bungee","Arial Black",sans-serif}
 #msg .small{font-size:13px;font-weight:700;letter-spacing:3px;margin-top:10px;opacity:.9}
-#msg .tap{margin-top:22px;font-size:14px;font-weight:700;letter-spacing:3px;animation:p 1.6s ease-in-out infinite}
+#msg .tap{margin:22px 24px 0;font-size:14px;font-weight:700;letter-spacing:3px;animation:p 1.6s ease-in-out infinite}
 @keyframes p{50%{opacity:.35}}
 body.playing #msg{opacity:0}
 body:not(.playing) #hud{opacity:0}
@@ -37,11 +37,23 @@ body:not(.playing) #hud{opacity:0}
 <div id="best" class="ui">BEST<b id="bestv">0</b></div>
 <div id="msg" class="ui"><div class="big" id="msgBig"></div><div class="small" id="msgSmall"></div><div class="tap" id="msgTap">TAP TO BUILD</div></div>
 
-<script type="importmap">
-{"imports":{"three":"../../vendor/three-0.160.0/three.module.min.js"}}
+<script>
+// If the 3D game can't start on this browser, say so instead of leaving a dead "tap to build" screen.
+function qabusFail(why){
+  if (window.__qabusOk) return;
+  document.getElementById('msgBig').textContent = '';
+  document.getElementById('msgSmall').textContent = "THIS BROWSER COULDN'T START THE 3D GAME";
+  var t = document.getElementById('msgTap'); t.style.animation = 'none'; t.style.textTransform = 'none'; t.style.letterSpacing = '0';
+  t.textContent = 'Try updating your browser, or open Game Net in Chrome or Safari. (' + String(why || 'unknown error').slice(0, 120) + ')';
+}
+addEventListener('error', function(e){
+  if (e.message) return qabusFail(e.message);                                   // a script crashed
+  var t = e.target; if (t && t.tagName === 'SCRIPT') qabusFail('could not load ' + (t.src || 'the game').split('/').pop());  // fonts failing is fine
+}, true);
+setTimeout(function(){ if (!window.__qabusOk) qabusFail('took too long to load'); }, 15000);
 </script>
 <script type="module">
-import * as THREE from 'three';
+import * as THREE from '../../vendor/three-0.160.0/three.module.min.js';
 import {RoundedBoxGeometry} from '../../vendor/three-0.160.0/RoundedBoxGeometry.js';
 
 const $ = id => document.getElementById(id);
@@ -98,7 +110,7 @@ const brickTex = canvasTex(256, 64, (g, w, h) => {
   for (let r = 0; r < 2; r++) for (let i = -1; i < 5; i++) {
     const x = i * bw + (r % 2 ? bw / 2 : 0), y = r * h / 2;
     g.fillStyle = `hsl(${18 + Math.random() * 8},55%,${52 + Math.random() * 8}%)`;
-    g.beginPath(); g.roundRect(x + 3, y + 3, bw - 6, h / 2 - 6, 3); g.fill();
+    g.fillRect(x + 3, y + 3, bw - 6, h / 2 - 6);
   }
 });
 const tileTex = canvasTex(128, 32, (g, w, h) => {
@@ -148,7 +160,7 @@ function slabMesh(w, d, kind){
   const m = new THREE.Mesh(new RoundedBoxGeometry(w, H, d, 2, 0.05), [sx, sx, t, t, sz, sz]); // +x,-x,+y,-y,+z,-z
   m.castShadow = m.receiveShadow = true; return m;
 }
-function drop3(m){ scene.remove(m); m.geometry.dispose(); }
+function drop3(m){ scene.remove(m); m.geometry.dispose(); if (m.isLineSegments) m.material.dispose(); }  // slab materials are shared; ring materials are not
 
 /* ---------- world ---------- */
 // ten-flanged stone base, after the brick tower of Gonbad-e Qabus
@@ -280,7 +292,8 @@ function tap(e){
   if (state === 'over') newTower();
   state = 'playing'; document.body.classList.add('playing'); spawn();
 }
-addEventListener('pointerdown', tap);
+if (window.PointerEvent) document.addEventListener('pointerdown', tap, {passive:false});
+else document.addEventListener('touchstart', tap, {passive:false});
 addEventListener('keydown', e => { if (e.code === 'Space' || e.code === 'Enter') tap(e); });
 // leaving mid-round still counts the score
 addEventListener('pagehide', () => { if (state === 'playing' && score > 0) toHost('over', score); });
@@ -322,6 +335,7 @@ function frame(){
 
 newTower();
 $('msgBig').textContent = ''; $('msgSmall').textContent = best ? 'BEST ' + best : '';
+window.__qabusOk = true;
 frame();
 </script>
 </body>
