@@ -65,6 +65,30 @@ const GAMES = [
     create: createNagys,
     thumb: drawNagysThumb,
   },
+  {
+    id: 'gumly',
+    title: 'Gumly Gelin',
+    rtl: false,
+    blurb: 'Nowruz cleaning in the courtyard. Tap the dust puffs to beat the carpets clean, and catch the moths before they chew holes. Leave the napping cat alone. Three holes and you are done.',
+    create: createGumly,
+    thumb: drawGumlyThumb,
+  },
+  {
+    id: 'slinger',
+    title: 'Yarn Slinger',
+    rtl: false,
+    blurb: 'The loom keeps lowering a half-woven carpet. Drag to aim and sling yarn balls; join three of one tribe to unpick them before the fringe touches the floor.',
+    create: createSlinger,
+    thumb: drawSlingerThumb,
+  },
+  {
+    id: 'kerwen',
+    title: 'Kerwen',
+    rtl: false,
+    blurb: 'Lead a camel caravan across a giant carpet. Swipe to steer and pick up rolled carpets; three camels of one tribe in a row are sold at the bazaar. Do not hit the border, a stall or your own caravan.',
+    create: createKerwen,
+    thumb: drawKerwenThumb,
+  },
 ];
 
 const $ = id => document.getElementById(id);
