@@ -1,0 +1,1524 @@
+<title>Nagyş</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;500&display=swap">
+<style>
+/* One-screen phone game in the Arkadag carpet look: HUD strip on top, the game canvas fills the rest. Single dark look on purpose. */
+:root {
+  --bg: #0c1020;
+  --panel: #141a36;
+  --line: #2a3566;
+  --fg: #f1e8d4;
+  --muted: #a6abcf;
+  --saffron: #e9a640;
+  --gold: #ffcf5a;
+  --red: #8e1d27;
+  --f-display: "Bungee", "Arial Black", Impact, sans-serif;
+  --f-body: "Rubik", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+html, body, * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+body { touch-action: manipulation; background: radial-gradient(120% 70% at 50% 0%, #1a1530 0%, var(--bg) 60%); background-color: var(--bg); color: var(--fg); font: 14px/1.5 var(--f-body); overflow: hidden; }
+.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; padding-block: 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 560px; margin: 0 auto; box-sizing: border-box; }
+.hud { display: flex; justify-content: space-between; align-items: center; gap: 8px; font: 11px var(--f-display); color: var(--muted); letter-spacing: .06em; }
+.hud b { display: block; font: 20px var(--f-display); color: var(--fg); font-variant-numeric: tabular-nums; letter-spacing: 0; white-space: nowrap; }
+.hud .mid b { color: var(--saffron); font-size: 17px; }
+.hud .right { display: flex; align-items: center; gap: 10px; }
+#stage { position: relative; display: grid; place-items: center; touch-action: none; min-height: 0; }
+canvas { display: block; touch-action: none; }
+button { font: 12px var(--f-display); letter-spacing: .05em; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+#sound { padding: 0; width: 36px; height: 34px; display: grid; place-items: center; }
+button:focus-visible { outline: 2px solid var(--saffron); outline-offset: 2px; }
+#overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(8, 10, 22, .62); }
+.card { background: linear-gradient(180deg, #1c1838, #120f26); border: 1px solid #4a2a2e; border-radius: 16px; padding: 18px 20px 20px; display: grid; gap: 10px; justify-items: center; text-align: center; width: min(320px, 86%); box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+.card .big { font: 30px var(--f-display); }
+.card .eyebrow { font: 11px var(--f-display); letter-spacing: .1em; color: var(--saffron); }
+.card .muted { color: var(--muted); margin: 0; }
+.card button { font-size: 15px; padding: 11px 28px; background: var(--red); border-color: #c4434b; }
+#toast { position: absolute; top: 20%; left: 50%; transform: translate(-50%, 0); font: 18px var(--f-display); color: var(--gold); text-shadow: 0 2px 0 #3a1410, 0 0 18px rgba(255, 207, 90, .5); opacity: 0; pointer-events: none; white-space: nowrap; }
+#toast.show { animation: toast 1.2s ease-out; }
+@keyframes toast { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.9); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -14px); } }
+@media (prefers-reduced-motion: reduce) { #toast.show { animation-duration: .01s; } }
+</style>
+<div class="app">
+  <div class="hud">
+    <div>Score<b id="score">0</b></div>
+    <div class="mid" id="midBox">Combo<b id="mid">–</b></div>
+    <div class="right"><div style="text-align:right">Best<b id="best">0</b></div><button id="sound" type="button" aria-label="Sound"></button><button id="pause" type="button">Pause</button></div>
+  </div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="toast"></div>
+    <div id="overlay" hidden></div>
+  </div>
+</div>
+<script>
+// Game Net sound: soft effects made in code with Web Audio, so there are no sound files to load. No music (Milad's call).
+// Phones only allow sound after a tap, so the first tap or key press anywhere in the game wakes it up.
+// iPhones also go quiet when the ring/silent switch is on silent. Asking for "playback" audio (iOS 17+),
+// or playing a silent loop on older iPhones, makes the game sound like a video does instead.
+// Everything goes through a gentle low-pass and a compressor, and buzzy waves are swapped for round ones, so nothing is shrill.
+// One setting for every game: 'all' (sound on) or 'off'.
+(function () {
+  const KEY = 'gamenet-sound';
+  let mode = 'all';
+  try { if (localStorage.getItem(KEY) === 'off') mode = 'off'; } catch (e) {}
+  const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+  let ctx = null, master, fxBus, verbIn, keepAlive = null;
+  const buttons = [];
+
+  function build() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return false;
+    try { ctx = new AC({ latencyHint: 'interactive' }); } catch (e) { try { ctx = new AC(); } catch (e2) { return false; } }
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 5; comp.attack.value = .005; comp.release.value = .25;
+    const soft = ctx.createBiquadFilter(); soft.type = 'lowpass'; soft.frequency.value = 3200; soft.Q.value = .5;
+    master = ctx.createGain(); master.gain.value = .7;
+    master.connect(soft); soft.connect(comp); comp.connect(ctx.destination);
+    fxBus = ctx.createGain(); fxBus.connect(master);
+    // a soft room echo shared by everything that asks for it
+    const verb = ctx.createConvolver(), len = Math.floor(ctx.sampleRate * 2.2), ir = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
+    verb.buffer = ir; verbIn = ctx.createGain(); verbIn.gain.value = .5;
+    verbIn.connect(verb); verb.connect(master);
+    return true;
+  }
+
+  // a short silent WAV, made here so nothing has to download
+  function silentLoop() {
+    const n = 4000, b = new ArrayBuffer(44 + n), v = new DataView(b);
+    const s = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    s(0, 'RIFF'); v.setUint32(4, 36 + n, true); s(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); s(36, 'data'); v.setUint32(40, n, true);
+    for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);
+    const a = document.createElement('audio');
+    a.src = URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
+    a.loop = true; a.setAttribute('playsinline', ''); a.setAttribute('x-webkit-airplay', 'deny'); a.preload = 'auto';
+    return a;
+  }
+
+  function unlock() {
+    if (mode === 'off') return;
+    if (!ctx && !build()) return;
+    try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) {}
+    if (IOS && !navigator.audioSession) {
+      if (!keepAlive) keepAlive = silentLoop();
+      if (keepAlive.paused) keepAlive.play().catch(() => {});
+    }
+    if (ctx.state !== 'running') {
+      ctx.resume().catch(() => {});
+      // older iPhones also want a sound started inside the tap itself
+      try { const src = ctx.createBufferSource(); src.buffer = ctx.createBuffer(1, 1, 22050); src.connect(ctx.destination); src.start(0); } catch (e) {}
+    }
+  }
+  ['pointerdown', 'pointerup', 'touchend', 'mousedown', 'click', 'keydown'].forEach(t => addEventListener(t, unlock, { capture: true, passive: true }));
+  document.addEventListener('visibilitychange', () => {
+    if (!ctx) return;
+    if (document.hidden) { ctx.suspend().catch(() => {}); if (keepAlive) keepAlive.pause(); }
+    else if (mode !== 'off') { ctx.resume().catch(() => {}); if (keepAlive) keepAlive.play().catch(() => {}); }
+  });
+  addEventListener('pagehide', () => { if (ctx) ctx.suspend().catch(() => {}); if (keepAlive) keepAlive.pause(); });
+
+  const live = () => ctx && ctx.state === 'running' && !document.hidden;
+
+  // envelope + optional echo send + optional pan, then on to a bus
+  function chain(node, o, t, dur) {
+    const g = ctx.createGain(), vol = o.vol == null ? .2 : o.vol, a = Math.max(.012, o.attack || 0);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + a);
+    g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    node.connect(g);
+    let end = g;
+    if (o.pan && ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = o.pan; g.connect(p); end = p; }
+    end.connect(fxBus);
+    if (o.verb) { const s = ctx.createGain(); s.gain.value = o.verb; end.connect(s); s.connect(verbIn); }
+  }
+
+  // a plain tone that can glide: tone(440, .2, {type:'triangle', to:220, vol:.2, at:0})
+  function tone(freq, dur, o = {}) {
+    if (!live()) return;
+    const t = ctx.currentTime + (o.at || 0), osc = ctx.createOscillator();
+    osc.type = o.type === 'triangle' ? 'triangle' : 'sine';   // square and sawtooth buzz, so they are never used
+    osc.frequency.setValueAtTime(freq, t);
+    if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t + (o.glide || dur));
+    if (o.detune) osc.detune.value = o.detune;
+    chain(osc, o, t, dur); osc.start(t); osc.stop(t + dur + .05);
+  }
+
+  let noiseBuf = null;
+  // filtered noise for hits, swishes, crunches and booms: noise(.3, {filter:'lowpass', freq:900, to:80})
+  function noise(dur, o = {}) {
+    if (!live()) return;
+    if (!noiseBuf) { const n = ctx.sampleRate; noiseBuf = ctx.createBuffer(1, n, ctx.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; }
+    const t = ctx.currentTime + (o.at || 0), src = ctx.createBufferSource(), f = ctx.createBiquadFilter();
+    src.buffer = noiseBuf; src.loop = true;
+    f.type = o.filter || 'bandpass'; f.Q.value = o.q || 1;
+    f.frequency.setValueAtTime(o.freq || 1200, t);
+    if (o.to) f.frequency.exponentialRampToValueAtTime(o.to, t + (o.glide || dur));
+    src.connect(f); chain(f, o, t, dur);
+    src.start(t, Math.random()); src.stop(t + dur + .05);
+  }
+
+  // plucked string (Karplus-Strong), cached per pitch: santur, dutar, kalimba-like notes.
+  // Made at 22 kHz (plenty for a plucked string) so a new note costs well under a millisecond on a phone.
+  const strings = new Map();
+  function stringBuf(freq, dur, bright, damp) {
+    const key = Math.round(freq * 10) + '|' + dur + '|' + bright + '|' + damp;
+    let b = strings.get(key);
+    if (b) return b;
+    const sr = 22050, n = Math.floor(sr * dur), y = new Float32Array(n), k = Math.pow(damp, ctx.sampleRate / sr);
+    const per = sr / freq, P = Math.max(2, Math.floor(per)), w = per - P;
+    let lp = 0, peak = 0;
+    for (let i = 0; i < P + 1 && i < n; i++) { lp += (Math.random() * 2 - 1 - lp) * bright; y[i] = lp; peak = Math.max(peak, Math.abs(lp)); }
+    const g = peak > 0 ? 1 / peak : 1;
+    for (let i = 0; i < P + 1 && i < n; i++) y[i] *= g;
+    for (let i = P + 1; i < n; i++) y[i] = k * ((1 - w) * y[i - P] + w * y[i - P - 1]);
+    b = ctx.createBuffer(1, n, sr); b.getChannelData(0).set(y);
+    if (strings.size > 120) strings.clear();
+    strings.set(key, b); return b;
+  }
+  function pluck(freq, dur, o = {}) {
+    if (!live()) return;
+    const t = ctx.currentTime + (o.at || 0), src = ctx.createBufferSource();
+    src.buffer = stringBuf(freq, dur, o.bright == null ? .6 : o.bright, o.damp || .996);
+    if (o.rate) src.playbackRate.value = o.rate;
+    chain(src, o, t, dur); src.start(t); src.stop(t + dur + .05);
+  }
+
+  // speaker button: sound on / off
+  const ICON = {
+    all: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    off: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3z" fill="currentColor"/><path d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  };
+  const LABEL = { all: 'Sound on', off: 'Sound off' };
+  function paint() { buttons.forEach(b => { b.innerHTML = ICON[mode]; b.setAttribute('aria-label', LABEL[mode]); b.title = LABEL[mode]; }); }
+  function setMode(m) {
+    mode = m;
+    try { localStorage.setItem(KEY, m); } catch (e) {}
+    if (m === 'off') { if (ctx) ctx.suspend().catch(() => {}); if (keepAlive) keepAlive.pause(); }
+    else unlock();
+    paint();
+  }
+  function button(el) {
+    buttons.push(el);
+    // the games listen for taps on the whole page; a tap on this button is only for the sound
+    ['pointerdown', 'touchstart', 'mousedown'].forEach(t => el.addEventListener(t, e => e.stopPropagation()));
+    el.addEventListener('click', e => { e.stopPropagation(); setMode(mode === 'off' ? 'all' : 'off'); if (mode !== 'off' && ctx) ctx.resume().then(() => tone(660, .2, { vol: .08 }), () => {}); el.blur(); });
+    el.addEventListener('keydown', e => e.stopPropagation());
+    paint(); return el;
+  }
+
+  window.GameSound = {
+    tone, noise, pluck, button, unlock,
+    get mode() { return mode; },
+    get ctx() { return ctx; },
+    // pitch of scale step n (any whole number), from a base frequency and a list of semitones in one octave
+    note(base, scale, n) { const o = Math.floor(n / scale.length), k = ((n % scale.length) + scale.length) % scale.length; return base * Math.pow(2, o + scale[k] / 12); },
+  };
+})();
+
+</script>
+<script>
+(()=>{const DPR=1; let SPR=2;
+const T = {
+  T: { name: 'Teke', fa: 'تکه', ground: '#9e1f2a', a: '#ecdcb6', b: '#1b2244', c: '#e07b26', line: '#14183a', shape: [[0,0],[1,0],[2,0],[1,1]], },
+  Y: { name: 'Yomut', fa: 'یموت', ground: '#26365f', a: '#c8393a', b: '#ecdcb6', c: '#e2a13a', line: '#0d1330', shape: [[0,0],[0,1],[0,2],[1,2]], },
+  S: { name: 'Saryk', fa: 'ساریق', ground: '#c98422', a: '#7d1a22', b: '#1b2244', c: '#f1e3c0', line: '#3a1410', shape: [[1,0],[2,0],[0,1],[1,1]], },
+  C: { name: 'Chovdur', fa: 'چاودور', ground: '#1e6a45', a: '#e8d8b0', b: '#a82730', c: '#e7a33a', line: '#0c2a1c', shape: [[0,0],[0,1],[0,2]], },
+  E: { name: 'Ersari', fa: 'ارساری', ground: '#e6d5ad', a: '#a3222c', b: '#1e2a52', c: '#2f7a50', line: '#3a1410', shape: [[1,0],[0,1],[1,1],[2,1],[1,2]], }
+};
+
+function rng(seed) { let s = (seed >>> 0) || 1; return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return ((s >>> 0) % 10000) / 10000; }; }
+function poly(g, pts) { g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); }
+function oct(w, h, c) { return [[-w+c,-h],[w-c,-h],[w,-h+c],[w,h-c],[w-c,h],[-w+c,h],[-w,h-c],[-w,-h+c]]; }
+function diamond(w, h) { return [[0,-h],[w,0],[0,h],[-w,0]]; }
+function stepDiamond(W, H, n) {
+  const P = [];
+  for (let i = 0; i < n; i++) { P.push([i*W/n, -H + i*H/n], [(i+1)*W/n, -H + i*H/n]); }
+  P.push([W, 0]);
+  const r = P.slice().reverse();
+  return [...P, ...r.map(([x,y]) => [x,-y]), ...P.map(([x,y]) => [-x,-y]), ...r.map(([x,y]) => [-x,y])];
+}
+
+// Helpers for the gul drawings (unit space -1..1).
+function fillP(g, pts, col) { g.fillStyle = col; poly(g, pts); g.fill(); }
+function dotC(g, x, y, r, col) { g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+function star(n, R, r, rot = 0) { const P = []; for (let i = 0; i < n * 2; i++) { const a = rot + i * Math.PI / n - Math.PI / 2, q = i % 2 ? r : R; P.push([Math.cos(a) * q, Math.sin(a) * q]); } return P; }
+function teeth(g, pts, per, size, col) {
+  g.fillStyle = col;
+  for (let i = 0; i < pts.length; i++) {
+    const [x1, y1] = pts[i], [x2, y2] = pts[(i + 1) % pts.length];
+    const len = Math.hypot(x2 - x1, y2 - y1); if (len < .12) continue;
+    let nx = (y2 - y1) / len, ny = -(x2 - x1) / len;
+    if (nx * (x1 + x2) + ny * (y1 + y2) < 0) { nx = -nx; ny = -ny; }
+    for (let k = 1; k <= per; k++) {
+      const t = k / (per + 1), mx = x1 + (x2 - x1) * t, my = y1 + (y2 - y1) * t, tx = (x2 - x1) / len * size * .7, ty = (y2 - y1) / len * size * .7;
+      g.beginPath(); g.moveTo(mx - tx, my - ty); g.lineTo(mx + nx * size, my + ny * size); g.lineTo(mx + tx, my + ty); g.closePath(); g.fill();
+    }
+  }
+}
+function perimeterDots(g, pts, n, r, col) {
+  const segs = pts.map((p, i) => [p, pts[(i + 1) % pts.length]]), lens = segs.map(([a, b]) => Math.hypot(b[0] - a[0], b[1] - a[1]));
+  const total = lens.reduce((a, b) => a + b, 0);
+  for (let k = 0; k < n; k++) {
+    let d = (k + .5) * total / n, i = 0; while (d > lens[i]) { d -= lens[i]; i++; }
+    const [a, b] = segs[i], t = d / lens[i]; dotC(g, a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, r, col);
+  }
+}
+function trefoil(g, x, y, s, ang, col) {
+  g.save(); g.translate(x, y); g.rotate(ang); g.fillStyle = col;
+  [[0, -s * .9], [-s * .78, -s * .1], [s * .78, -s * .1]].forEach(([a, b]) => { g.beginPath(); g.arc(a, b, s * .5, 0, 7); g.fill(); });
+  g.fillRect(-s * .16, -s * .2, s * .32, s * 1.25); g.restore();
+}
+function hornPair(g, x, y, s, ang, col, w) {
+  g.save(); g.translate(x, y); g.rotate(ang); g.strokeStyle = col; g.lineWidth = w; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -s * .55); g.stroke();
+  [-1, 1].forEach(d => { g.beginPath(); g.moveTo(0, -s * .55); g.quadraticCurveTo(d * s * .55, -s * .95, d * s * .55, -s * .45); g.quadraticCurveTo(d * s * .55, -s * .25, d * s * .3, -s * .3); g.stroke(); });
+  g.restore();
+}
+
+// The five tribal guls. Each is layered like a real carpet: dark outline, ivory hairline, field, inner motifs.
+const GULS = {
+  T(g, p) {
+    const O = oct(.9, .7, .3);
+    teeth(g, O, 3, .075, p.line);
+    [-1, 1].forEach(s => { g.fillStyle = p.line; g.fillRect(-.035, s > 0 ? .68 : -.97, .07, .29); fillP(g, [[-.14, s * .97], [0, s * .84], [.14, s * .97]], p.line); });
+    fillP(g, O, p.line); fillP(g, oct(.85, .65, .28), p.a); fillP(g, oct(.81, .61, .265), p.line);
+    g.save(); poly(g, oct(.77, .57, .25)); g.clip();
+    g.fillStyle = p.a; g.fillRect(-1, -1, 1, 1); g.fillRect(0, 0, 1, 1);
+    g.fillStyle = p.c; g.fillRect(0, -1, 1, 1); g.fillRect(-1, 0, 1, 1);
+    [[-1, -1], [1, 1], [1, -1], [-1, 1]].forEach(([sx, sy], i) => {
+      const ivory = i < 2;
+      trefoil(g, sx * .44, sy * .3, .1, Math.atan2(sy, sx) + Math.PI / 2, ivory ? p.ground : p.line);
+      dotC(g, sx * .66, sy * .1, .035, ivory ? p.line : p.a); dotC(g, sx * .14, sy * .45, .035, ivory ? p.line : p.a);
+    });
+    g.fillStyle = p.line; g.fillRect(-1, -.06, 2, .12); g.fillRect(-.06, -1, .12, 2);
+    g.fillStyle = p.a; g.fillRect(-1, -.014, 2, .028); g.fillRect(-.014, -1, .028, 2);
+    g.restore();
+    fillP(g, oct(.27, .23, .1), p.line); fillP(g, oct(.23, .19, .085), p.a);
+    fillP(g, star(8, .19, .09, Math.PI / 8), p.ground); dotC(g, 0, 0, .055, p.line); dotC(g, 0, 0, .025, p.a);
+  },
+  Y(g, p) {
+    [-1, 1].forEach(s => hornPair(g, s * .86, 0, .3, s * Math.PI / 2, p.c, .06));
+    [-1, 1].forEach(s => hornPair(g, 0, s * .86, .22, s > 0 ? Math.PI : 0, p.c, .055));
+    fillP(g, stepDiamond(.9, .9, 5), p.line);
+    fillP(g, stepDiamond(.83, .83, 5), p.b);
+    fillP(g, stepDiamond(.77, .77, 5), p.a);
+    [[.62, 0], [-.62, 0], [0, .62], [0, -.62]].forEach(([x, y]) => { fillP(g, diamond(.1, .1).map(([a, b]) => [a + x, b + y]), p.line); fillP(g, diamond(.05, .05).map(([a, b]) => [a + x, b + y]), p.b); });
+    [[.36, .36], [-.36, .36], [.36, -.36], [-.36, -.36]].forEach(([x, y]) => dotC(g, x * .92, y * .92, .04, p.b));
+    fillP(g, stepDiamond(.5, .5, 4), p.line);
+    fillP(g, stepDiamond(.44, .44, 4), p.c);
+    fillP(g, stepDiamond(.3, .3, 3), p.line);
+    fillP(g, stepDiamond(.24, .24, 3), p.b);
+    g.fillStyle = p.a; g.fillRect(-.15, -.035, .3, .07); g.fillRect(-.035, -.15, .07, .3);
+    dotC(g, 0, 0, .05, p.line);
+  },
+  S(g, p) {
+    const O = oct(.88, .78, .3);
+    teeth(g, O, 2, .07, p.line);
+    fillP(g, O, p.line); fillP(g, oct(.83, .73, .28), p.a);
+    perimeterDots(g, oct(.775, .675, .26), 28, .028, p.c);
+    fillP(g, oct(.72, .62, .25), p.line); fillP(g, oct(.68, .58, .235), p.c);
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4, r = .37;
+      g.save(); g.translate(Math.cos(a) * r, Math.sin(a) * r); g.rotate(a);
+      g.fillStyle = p.line; g.beginPath(); g.ellipse(0, 0, .2, .095, 0, 0, 7); g.fill();
+      g.fillStyle = i % 2 ? p.b : p.a; g.beginPath(); g.ellipse(0, 0, .16, .06, 0, 0, 7); g.fill();
+      g.restore();
+    }
+    dotC(g, 0, 0, .19, p.line); fillP(g, star(8, .16, .08), p.a); dotC(g, 0, 0, .05, p.c);
+  },
+  C(g, p) {
+    for (let k = 0; k < 4; k++) { g.save(); g.rotate(k * Math.PI / 2); hornPair(g, 0, -.82, .3, 0, p.c, .06); g.restore(); }
+    const D = diamond(.86, .86);
+    fillP(g, D, p.line); fillP(g, diamond(.8, .8), p.a); fillP(g, diamond(.75, .75), p.line);
+    fillP(g, diamond(.7, .7), p.b);
+    perimeterDots(g, diamond(.62, .62), 16, .03, p.a);
+    fillP(g, diamond(.54, .54), p.line); fillP(g, diamond(.5, .5), p.a);
+    [[0, -1], [1, 0], [0, 1], [-1, 0]].forEach(([x, y]) => {
+      const cx = (x - y) * .17, cy = (x + y) * .17;
+      fillP(g, stepDiamond(.12, .12, 2).map(([a, b]) => [a + cx, b + cy]), p.line);
+      dotC(g, cx, cy, .035, p.c);
+    });
+    g.fillStyle = p.b; g.fillRect(-.42, -.05, .84, .1); g.fillRect(-.05, -.42, .1, .84);
+    fillP(g, diamond(.15, .15), p.line); fillP(g, diamond(.1, .1), p.c);
+  },
+  E(g, p) {
+    const lobes = [[-.46, 0], [.46, 0], [0, -.46], [0, .46]];
+    [[1, 1], [1, -1], [-1, 1], [-1, -1]].forEach(([x, y]) => trefoil(g, x * .56, y * .56, .1, Math.atan2(y, x) + Math.PI / 2, p.c));
+    lobes.forEach(([x, y]) => dotC(g, x, y, .41, p.line)); g.fillStyle = p.line; g.fillRect(-.46, -.46, .92, .92);
+    lobes.forEach(([x, y]) => dotC(g, x, y, .37, p.ground)); g.fillStyle = p.ground; g.fillRect(-.46, -.46, .92, .92);
+    lobes.forEach(([x, y]) => dotC(g, x, y, .33, p.a)); g.fillStyle = p.a; g.fillRect(-.46, -.46, .92, .92);
+    lobes.forEach(([x, y]) => { dotC(g, x * 1.04, y * 1.04, .13, p.line); dotC(g, x * 1.04, y * 1.04, .09, p.ground); dotC(g, x * 1.04, y * 1.04, .04, p.c); });
+    fillP(g, diamond(.4, .4), p.line); fillP(g, diamond(.35, .35), p.ground); fillP(g, diamond(.31, .31), p.b);
+    fillP(g, star(4, .24, .07), p.ground); dotC(g, 0, 0, .06, p.a);
+  }
+};
+
+function drawGul(g, key, cx, cy, size) {
+  g.save(); g.translate(cx, cy); g.scale(size / 2, size / 2); GULS[key](g, T[key]); g.restore();
+}
+
+function paintCell(g, key, s, seed, gulScale = .8) {
+  const t = T[key];
+  g.fillStyle = t.ground; g.fillRect(0, 0, s, s);
+  const r = rng(seed * 7919 + key.charCodeAt(0) * 977), k = s / 22;
+  for (let y = 0; y < s; y += k) for (let x = (y / k) % 2 ? k * .6 : 0; x < s; x += k * 1.2) {
+    const v = r();
+    g.fillStyle = v < .5 ? `rgba(0,0,0,${(.5 - v) * .14})` : `rgba(255,248,230,${(v - .5) * .09})`;
+    g.beginPath(); g.ellipse(x + k * .6, y + k * .5, k * .62, k * .5, 0, 0, 7); g.fill();
+  }
+  const vg = g.createRadialGradient(s / 2, s / 2, s * .2, s / 2, s / 2, s * .75);
+  vg.addColorStop(0, 'rgba(255,245,225,.06)'); vg.addColorStop(1, 'rgba(0,0,0,.16)');
+  g.fillStyle = vg; g.fillRect(0, 0, s, s);
+  g.strokeStyle = t.line; g.globalAlpha = .5; g.lineWidth = s * .03; g.strokeRect(s * .03, s * .03, s * .94, s * .94);
+  g.strokeStyle = '#f3e6c6'; g.globalAlpha = .22; g.lineWidth = s * .012; g.strokeRect(s * .065, s * .065, s * .87, s * .87); g.globalAlpha = 1;
+  if (gulScale) drawGul(g, key, s / 2, s / 2, s * gulScale);
+}
+
+const spriteCache = new Map();
+function sprite(key, cs, seed = 1) {
+  const id = key + cs + ':' + (seed % 4);
+  if (!spriteCache.has(id)) {
+    const c = document.createElement('canvas'); c.width = c.height = Math.ceil(cs * SPR);
+    const g = c.getContext('2d'); g.scale(SPR, SPR); paintCell(g, key, cs, seed % 4 + 1, .86);
+    spriteCache.set(id, c);
+  }
+  return spriteCache.get(id);
+}
+
+function easeInOut(x) { return x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; }
+function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+
+// Geometry of a board drawing.
+function geom(cs, cols, rows, opts = {}) {
+  const bw = Math.round(cs * .55), beam = opts.noBeam ? 0 : Math.round(cs * .7), fringe = Math.round(cs * .55);
+  return { cs, cols, rows, bw, beam, fringe, ox: bw, oy: beam + bw, w: cols * cs + 2 * bw, h: beam + rows * cs + 2 * bw + fringe };
+}
+
+function drawFrame(g, G) {
+  const { cs, bw, ox, oy, cols, rows } = G, W = cols * cs, H = rows * cs;
+  // loom beam
+  if (G.beam) {
+    const bg = g.createLinearGradient(0, 0, 0, G.beam);
+    bg.addColorStop(0, '#6a4426'); bg.addColorStop(.5, '#8d5d34'); bg.addColorStop(1, '#4a2e18');
+    g.fillStyle = bg; g.fillRect(0, G.beam * .2, G.w, G.beam * .62);
+    g.fillStyle = 'rgba(0,0,0,.25)'; for (let x = 6; x < G.w; x += 23) g.fillRect(x, G.beam * .26, 1, G.beam * .5);
+    g.strokeStyle = 'rgba(241,232,212,.35)'; g.lineWidth = 1;
+    for (let x = ox + cs / 6; x < ox + W; x += cs / 3) { g.beginPath(); g.moveTo(x, G.beam * .8); g.lineTo(x, oy); g.stroke(); }
+  }
+  // border band
+  g.fillStyle = '#6e141d'; g.fillRect(0, oy - bw, G.w, bw); g.fillRect(0, oy + H, G.w, bw); g.fillRect(0, oy - bw, bw, H + 2 * bw); g.fillRect(ox + W, oy - bw, bw, H + 2 * bw);
+  g.strokeStyle = '#ecdcb6'; g.lineWidth = Math.max(1, cs * .05);
+  g.strokeRect(bw * .14, oy - bw * .86, G.w - bw * .28, H + bw * 1.72);
+  g.strokeStyle = '#1b2244'; g.lineWidth = Math.max(1, cs * .07);
+  g.strokeRect(ox - cs * .06, oy - cs * .06, W + cs * .12, H + cs * .12);
+  // running motif: small diamonds along the band
+  const step = cs * .5, d = bw * .22;
+  const dot = (x, y, i) => { g.fillStyle = i % 2 ? '#e07b26' : '#ecdcb6'; poly(g, [[x, y - d], [x + d, y], [x, y + d], [x - d, y]]); g.fill(); };
+  let i = 0;
+  for (let x = bw / 2; x <= G.w - bw / 2 + 1; x += step) { dot(x, oy - bw / 2, i); dot(x, oy + H + bw / 2, i + 1); i++; }
+  i = 0;
+  for (let y = oy + step / 2; y < oy + H; y += step) { dot(bw / 2, y, i); dot(ox + W + bw / 2, y, i + 1); i++; }
+  // tassels
+  const r = rng(42);
+  g.strokeStyle = '#e8d9b4'; g.lineWidth = Math.max(1, cs * .05);
+  const ty = oy + H + bw;
+  for (let x = bw * .4; x < G.w - bw * .3; x += cs / 4.5) { const len = G.fringe * (.65 + r() * .3); g.beginPath(); g.moveTo(x, ty); g.quadraticCurveTo(x + (r() - .5) * 3, ty + len / 2, x + (r() - .5) * 4, ty + len); g.stroke(); }
+}
+
+function drawLoomGround(g, G) {
+  const { cs, ox, oy, cols, rows } = G, W = cols * cs, H = rows * cs;
+  g.fillStyle = '#17112a'; g.fillRect(ox, oy, W, H);
+  g.strokeStyle = 'rgba(241,232,212,.13)'; g.lineWidth = 1;
+  for (let x = ox + cs / 6; x < ox + W; x += cs / 3) { g.beginPath(); g.moveTo(x, oy); g.lineTo(x, oy + H); g.stroke(); }
+}
+
+window.ART={setSPR(v){if(Math.abs(v-SPR)>.01){SPR=v;spriteCache.clear()}},T,GULS,drawGul,paintCell,sprite,geom,drawFrame,drawLoomGround,poly,fillP,dotC,star,diamond,oct,rng,stepDiamond};
+})();
+
+</script>
+<script>
+// Shared drawing helpers in the Arkadag carpet language: border bands, tassels, warp threads, gold guls, yarn balls.
+const { T, sprite, drawGul, paintCell, poly, fillP, dotC, star, diamond, oct, rng } = ART;
+const K = ['T', 'Y', 'S', 'C', 'E'];
+const C = { red: '#9e1f2a', band: '#6e141d', navy: '#1b2244', cream: '#ecdcb6', orange: '#e07b26', gold: '#ffcf5a', saffron: '#e9a640', muted: '#a6abcf', fg: '#f1e8d4', ink: '#17112a', green: '#1e6a45' };
+let g = null; // the game canvas context, set by the shell
+function tile(k, x, y, s, seed = 1) { g.drawImage(sprite(k, Math.round(s), seed), x, y, s, s); }
+function rr(x, y, w, h, r, f, s, lw = 1) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); if (f) { g.fillStyle = f; g.fill(); } if (s) { g.strokeStyle = s; g.lineWidth = lw; g.stroke(); } }
+function dia(x, y, d, col) { fillP(g, [[x, y - d], [x + d, y], [x, y + d], [x - d, y]], col); }
+function band(x, y, w, h, bw, field) {
+  g.fillStyle = C.band; g.fillRect(x, y, w, h);
+  g.strokeStyle = C.cream; g.lineWidth = 1.2; g.strokeRect(x + bw * .16, y + bw * .16, w - bw * .32, h - bw * .32);
+  const step = bw * .95, d = bw * .2; let i = 0;
+  for (let px = x + bw / 2; px <= x + w - bw / 2 + 1; px += step) { dia(px, y + bw / 2, d, i % 2 ? C.orange : C.cream); dia(px, y + h - bw / 2, d, i % 2 ? C.cream : C.orange); i++; }
+  i = 0; for (let py = y + bw / 2 + step; py < y + h - bw / 2 - 2; py += step) { dia(x + bw / 2, py, d, i % 2 ? C.orange : C.cream); dia(x + w - bw / 2, py, d, i % 2 ? C.cream : C.orange); i++; }
+  if (field !== null) { g.fillStyle = field || C.ink; g.fillRect(x + bw, y + bw, w - 2 * bw, h - 2 * bw); }
+  g.strokeStyle = C.navy; g.lineWidth = 2; g.strokeRect(x + bw - 1, y + bw - 1, w - 2 * bw + 2, h - 2 * bw + 2);
+}
+// a vertical strip of border (for scrolling roads): diamonds scroll with offset
+function sideBand(x, y, w, h, off) {
+  g.fillStyle = C.band; g.fillRect(x, y, w, h);
+  g.strokeStyle = C.cream; g.lineWidth = 1.2; g.beginPath(); g.moveTo(x + w * .2, y); g.lineTo(x + w * .2, y + h); g.moveTo(x + w * .8, y); g.lineTo(x + w * .8, y + h); g.stroke();
+  const step = w * .95, d = w * .2; let i = Math.floor(off / step);
+  for (let py = y - (off % step); py < y + h + step; py += step, i++) dia(x + w / 2, py, d, i % 2 ? C.orange : C.cream);
+}
+function tassels(x0, x1, y, len, dir = 1, seed = 3) { const r = rng(seed); g.strokeStyle = '#e8d9b4'; g.lineWidth = 1.3; for (let x = x0; x < x1; x += 5) { const l = len * (.65 + r() * .35); g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + (r() - .5) * 3, y + dir * l / 2, x + (r() - .5) * 4, y + dir * l); g.stroke(); } }
+function warp(x0, x1, y0, y1, gap = 6, a = .16) { g.strokeStyle = `rgba(241,232,212,${a})`; g.lineWidth = 1; g.beginPath(); for (let x = x0; x < x1; x += gap) { g.moveTo(x, y0); g.lineTo(x, y1); } g.stroke(); }
+function canvasToast(t, x, y, size = 16, alpha = 1) { g.save(); g.globalAlpha = alpha; g.font = size + 'px Bungee, "Arial Black", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; const tw = g.measureText(t).width; rr(x - tw / 2 - 12, y - size - 4, tw + 24, size + 14, (size + 14) / 2, 'rgba(20,10,22,.82)', 'rgba(255,207,90,.6)', 1.5); g.fillStyle = C.gold; g.fillText(t, x, y); g.restore(); }
+function telpek(x, y, r) { for (let i = 0; i < 14; i++) { const a = i / 14 * 6.283; dotC(g, x + Math.cos(a) * r * .7, y + Math.sin(a) * r * .7, r * .42, i % 2 ? '#f4efe4' : '#ddd5c4'); } dotC(g, x, y, r * .75, '#f7f2e8'); const q = rng(9); for (let i = 0; i < 10; i++) dotC(g, x + (q() - .5) * r, y + (q() - .5) * r, r * .18, '#e3dccd'); }
+function goldGul(x, y, r) { dotC(g, x, y, r + 3, '#2a1606'); g.save(); g.shadowColor = 'rgba(255,207,90,.8)'; g.shadowBlur = 12; dotC(g, x, y, r, '#c98422'); g.restore(); dotC(g, x, y, r * .86, C.gold); g.save(); g.translate(x, y); g.scale(r * .8, r * .8); fillP(g, oct(.9, .9, .38), '#7d1a22'); fillP(g, oct(.7, .7, .29), C.gold); fillP(g, diamond(.45, .45), '#7d1a22'); dotC(g, 0, 0, .16, C.gold); g.restore(); }
+const yarnCache = new Map();
+function yarn(x, y, r, col, tail = true) {
+  const key = col + r, sc = 3;
+  if (!yarnCache.has(key)) {
+    const c = document.createElement('canvas'); c.width = c.height = Math.ceil(r * 2 * sc + 8); const m = c.getContext('2d'); m.scale(sc, sc); const o = r + 1;
+    m.fillStyle = col; m.beginPath(); m.arc(o, o, r, 0, 7); m.fill(); m.save(); m.beginPath(); m.arc(o, o, r, 0, 7); m.clip();
+    m.strokeStyle = 'rgba(255,248,230,.35)'; m.lineWidth = 1.4; for (let i = -r; i < r; i += 4) { m.beginPath(); m.moveTo(o - r, o + i); m.quadraticCurveTo(o, o + i - r * .5, o + r, o + i + 4); m.stroke(); }
+    m.strokeStyle = 'rgba(0,0,0,.25)'; for (let i = -r; i < r; i += 5) { m.beginPath(); m.moveTo(o + i, o - r); m.quadraticCurveTo(o + i + r * .4, o, o + i - 2, o + r); m.stroke(); }
+    const sh = m.createRadialGradient(o - r * .3, o - r * .3, r * .1, o, o, r); sh.addColorStop(0, 'rgba(255,255,255,.12)'); sh.addColorStop(1, 'rgba(0,0,0,.3)'); m.fillStyle = sh; m.fillRect(0, 0, o * 2, o * 2); m.restore();
+    yarnCache.set(key, c);
+  }
+  g.drawImage(yarnCache.get(key), x - r - 1, y - r - 1, (r * 2 * sc + 8) / sc, (r * 2 * sc + 8) / sc);
+  if (tail) { g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.moveTo(x + r * .7, y + r * .7); g.quadraticCurveTo(x + r * 1.4, y + r * 1.2, x + r * 1.2, y + r * 1.7); g.stroke(); }
+}
+function bgNight(W, H) { const r = g.createRadialGradient(W / 2, 0, 10, W / 2, 0, H * .9); r.addColorStop(0, '#1a1530'); r.addColorStop(.6, '#0c1020'); g.fillStyle = r; g.fillRect(0, 0, W, H); }
+function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function ease(x) { return x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; }
+const rand = (a, b) => a + Math.random() * (b - a), randi = n => Math.floor(Math.random() * n), pick = a => a[randi(a.length)];
+// particles: small bits (dust, fluff, sparks) with gravity
+const parts = [];
+function burst(x, y, n, col, o = {}) { for (let i = 0; i < n; i++) { const a = rand(0, 6.283), v = rand(o.v0 || 40, o.v1 || 160); parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - (o.up || 0), life: rand(.4, o.life || .9), t: 0, r: rand(o.r0 || 1.5, o.r1 || 3.5), col: Array.isArray(col) ? pick(col) : col, gr: o.gr == null ? 300 : o.gr }); } }
+function stepParts(dt) { for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.t += dt; if (p.t >= p.life) { parts.splice(i, 1); continue; } p.vy += p.gr * dt; p.x += p.vx * dt; p.y += p.vy * dt; } }
+function drawParts() { parts.forEach(p => { g.globalAlpha = 1 - p.t / p.life; dotC(g, p.x, p.y, p.r, p.col); }); g.globalAlpha = 1; }
+// floating score text on the canvas
+const floats = [];
+function floatText(t, x, y, col = C.gold, size = 14) { floats.push({ t, x, y, col, size, age: 0 }); }
+function stepFloats(dt) { for (let i = floats.length - 1; i >= 0; i--) { floats[i].age += dt; if (floats[i].age > 1) floats.splice(i, 1); } }
+function drawFloats() { floats.forEach(f => { g.save(); g.globalAlpha = 1 - f.age; g.font = f.size + 'px Bungee, "Arial Black", sans-serif'; g.textAlign = 'center'; g.fillStyle = '#3a1410'; g.fillText(f.t, f.x, f.y - f.age * 30 + 2); g.fillStyle = f.col; g.fillText(f.t, f.x, f.y - f.age * 30); g.restore(); }); }
+
+</script>
+<script>
+// Game shell: sizes the canvas to the screen (logical width 390), runs the loop, keeps score/best,
+// handles pause, game over and touch/keyboard input, and reports scores to Game Net when hosted there.
+const Shell = (() => {
+  const $ = id => document.getElementById(id);
+  const stage = $('stage'), cv = $('cv'), overlay = $('overlay'), toastEl = $('toast');
+  const scoreEl = $('score'), bestEl = $('best'), midEl = $('mid'), pauseBtn = $('pause');
+  const S = {
+    W: 390, H: 760, scale: 1, score: 0, best: 0, state: 'boot', time: 0, game: null,
+    add(n) { S.score += Math.round(n); hud(); },
+    setMid(t) { midEl.textContent = t; },
+    toast(text) { toastEl.textContent = text; toastEl.classList.remove('show'); void toastEl.offsetWidth; toastEl.classList.add('show'); },
+    over(eyebrow, again = 'Play again', extra = '') {
+      if (S.state !== 'play') return;
+      S.state = 'over'; S.overT = 0;
+      if (S.score > S.best) { S.best = S.score; saveBest(S.best); }
+      hud(); toHost('over', S.score);
+      setTimeout(() => {
+        overlay.innerHTML = `<div class="card"><div class="eyebrow">${eyebrow}</div><div class="big">${fmt(S.score)}</div><p class="muted">Best ${fmt(S.best)}</p>${typeof extra === 'function' ? extra() : extra}<button id="again" type="button">${again}</button></div>`;
+        overlay.hidden = false; $('again').addEventListener('click', start); $('again').focus({ preventScroll: true });
+      }, 700);
+    },
+  };
+  const fmt = n => Math.round(n).toLocaleString('en-US');
+  const HOSTED = window.parent !== window, hashBest = /best=(\d+)/.exec(location.hash);
+  function toHost(type, score) { if (HOSTED) try { parent.postMessage({ gamenet: type, score }, '*'); } catch (e) {} }
+  let KEY = 'carpet-game-best';
+  function readBest() { try { return +localStorage.getItem(KEY) || 0; } catch (e) { return 0; } }
+  function saveBest(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
+  let reported = -1;
+  function hud() {
+    scoreEl.textContent = fmt(S.score); bestEl.textContent = fmt(Math.max(S.best, S.score));
+    if (S.state === 'play' && S.score !== reported) { reported = S.score; toHost('score', S.score); }
+  }
+
+  function fit() {
+    const sw = stage.clientWidth, sh = stage.clientHeight; if (!sw || !sh) return;
+    S.H = Math.round(clamp(S.W * sh / sw, 640, 900));
+    S.scale = Math.min(sw / S.W, sh / S.H);
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    cv.width = Math.round(S.W * S.scale * dpr); cv.height = Math.round(S.H * S.scale * dpr);
+    cv.style.width = Math.round(S.W * S.scale) + 'px'; cv.style.height = Math.round(S.H * S.scale) + 'px';
+    g = cv.getContext('2d'); g.setTransform(S.scale * dpr, 0, 0, S.scale * dpr, 0, 0); g.imageSmoothingQuality = 'high';
+    ART.setSPR(Math.min(4, Math.max(2, S.scale * dpr)));
+    if (S.game && S.game.resize) S.game.resize(S.W, S.H);
+  }
+
+  function start() {
+    if ((S.state === 'play' || S.state === 'paused') && S.score > 0) toHost('over', S.score);
+    S.score = 0; S.time = 0; S.state = 'play'; overlay.hidden = true; pauseBtn.textContent = 'Pause';
+    parts.length = 0; floats.length = 0; reported = -1;
+    S.game.init(S.W, S.H); hud();
+  }
+  function togglePause() {
+    if (S.state === 'play') { S.state = 'paused'; pauseBtn.textContent = 'Resume'; overlay.innerHTML = '<div class="card"><div class="big">Paused</div><button id="resume" type="button">Resume</button></div>'; overlay.hidden = false; $('resume').addEventListener('click', togglePause); }
+    else if (S.state === 'paused') { S.state = 'play'; pauseBtn.textContent = 'Pause'; overlay.hidden = true; last = performance.now(); }
+  }
+  pauseBtn.addEventListener('click', e => { togglePause(); pauseBtn.blur(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && S.state === 'play') togglePause(); });
+  addEventListener('pagehide', () => { if ((S.state === 'play' || S.state === 'paused') && S.score > 0) toHost('over', S.score); });
+
+  let last = performance.now();
+  function tick(now) {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    if (S.state === 'play') { S.time += dt; S.game.update(dt); }
+    if (S.state === 'over') { S.overT += dt; if (S.game.overUpdate) S.game.overUpdate(dt); }
+    stepParts(S.state === 'paused' ? 0 : dt); stepFloats(S.state === 'paused' ? 0 : dt);
+    g.save(); S.game.draw(); g.restore();
+    requestAnimationFrame(tick);
+  }
+
+  // input: pointer positions in game units
+  const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / S.scale, (e.clientY - r.top) / S.scale]; };
+  // every finger is tracked on its own, so two-finger chords and holds work
+  const downs = new Map();
+  stage.addEventListener('pointerdown', e => {
+    if (S.state !== 'play' || e.target.closest('#overlay')) return;
+    const [x, y] = pos(e), d = { x, y, t: performance.now(), id: e.pointerId }; downs.set(e.pointerId, d);
+    try { stage.setPointerCapture(e.pointerId); } catch (err) {}
+    S.game.down && S.game.down(x, y, d); e.preventDefault();
+  });
+  stage.addEventListener('pointermove', e => { const d = downs.get(e.pointerId); if (!d || S.state !== 'play') return; const [x, y] = pos(e); S.game.move && S.game.move(x, y, d); });
+  const up = e => { const d = downs.get(e.pointerId); if (!d) return; downs.delete(e.pointerId); const [x, y] = pos(e); if (S.state === 'play' && S.game.up) S.game.up(x, y, d, (performance.now() - d.t) / 1000); };
+  stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', e => { const d = downs.get(e.pointerId); if (d) d.cancel = true; up(e); });
+  addEventListener('keydown', e => {
+    if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { togglePause(); return; }
+    if (S.state === 'over' && (e.key === 'Enter' || e.key === ' ')) { start(); e.preventDefault(); return; }
+    if (S.state === 'play' && S.game.key && S.game.key(e.key, e) !== false) e.preventDefault();
+  });
+  addEventListener('keyup', e => { if (S.state === 'play' && S.game.keyup) S.game.keyup(e.key, e); });
+
+  if (window.GameSound) GameSound.button($('sound')); else $('sound').hidden = true;
+
+  S.run = game => {
+    S.game = game; KEY = 'carpet-' + game.id + '-best';
+    S.best = hashBest ? +hashBest[1] : readBest();
+    fit(); addEventListener('resize', fit);
+    if (document.fonts) document.fonts.ready.then(() => {});
+    start(); requestAnimationFrame(tick);
+  };
+  return S;
+})();
+// soft sounds; quiet no-ops when sound is unavailable
+const SND = window.GameSound || { tone() {}, noise() {}, pluck() {}, note: () => 440 };
+const MODE = [0, 2, 3, 5, 7, 9, 10], A3 = 220;
+function dutar(f, dur, o = {}) { SND.pluck(f, dur, Object.assign({ bright: .4, damp: .995, vol: .1, verb: .2 }, o)); }
+
+</script>
+<script>
+// One endless Turkmen carpet, drawn knot by knot (v8).
+// Every gul is authored directly on the knot grid (stepped 45° lines, like a real carpet chart), four-way mirror
+// symmetric, so nothing is blurry or jagged. Panels follow the Turkmen flag order, each tribe with its own ground.
+// Yarns: 5 basic colours, plus all 10 two-yarn mixes (tap both yarns together).
+const CARPET = (() => {
+  // four yarns, as in real carpet dyeing: madder red, indigo blue, a yellow dye and undyed white wool.
+  // Every other colour is two of them tied together (two fingers).
+  const YARN = {
+    R: '#a51f2c', N: '#1f2a66', C: '#f3ead6', Y: '#f0b323',
+    O: '#e8741e', // orange = red + yellow
+    G: '#1f7a4a', // green  = blue + yellow
+    M: '#6c2a66', // purple = red + blue
+    P: '#e07d9c', // pink   = red + white
+    B: '#8eaeea', // sky    = blue + white
+    S: '#e6cf86', // straw  = yellow + white
+  };
+  const MIX = { O: ['R', 'Y'], G: ['N', 'Y'], M: ['R', 'N'], P: ['R', 'C'], B: ['N', 'C'], S: ['Y', 'C'] };
+  const BASIC = ['R', 'N', 'Y', 'C'];
+  const NAMES = { R: 'red', N: 'blue', C: 'white', Y: 'yellow', O: 'orange', G: 'green', M: 'purple', P: 'pink', B: 'sky', S: 'straw' };
+  // the motifs below were drawn with a 15-colour palette; this folds them into the 10 colours above
+  const FOLD = { T: 'G', K: 'O', W: 'R', S: 'B', L: 'Y', I: 'S' };
+  const fold = c => FOLD[c] || c;
+  const BW = 11, COLS = 81, FW = COLS - 2 * BW, PER = 10;
+  const DIV = 7, PH = 64;   // divider rows, panel height in rows (divider included)
+  const START = BW;         // the bottom border comes first
+  const abs = Math.abs;
+  // shapes on the knot grid, in one quadrant (a, b >= 0)
+  const oct = (a, b, w, h, c) => a <= w && b <= h && a + b <= w + h - c;
+  const dia = (a, b, r) => a + b <= r;
+  // a small eight-point star (gurbaghe) used everywhere as a filler
+  function star(a, b, c1, c2, c3) {
+    const d = a + b;
+    if (d === 0) return c3;
+    if (d <= 1) return c2;
+    if (d <= 2 && a && b) return c2;
+    if ((a === 0 || b === 0) && d <= 4) return c1;
+    if (a === b && a <= 2) return c1;
+    return null;
+  }
+  // a stepped ram's-horn hook pointing outward along +b: stem then two curls
+  function horn(x, y, c) { // x across (signed), y along (0 = base)
+    const ax = abs(x);
+    if (ax === 0 && y >= 0 && y <= 2) return c;
+    if (y === 3 && ax <= 3) return c;
+    if (ax === 3 && y === 2) return c;
+    if (ax === 4 && (y === 2 || y === 1)) return null;
+    return null;
+  }
+
+  // ---- the five guls; x, y are signed knot offsets from the gul's centre ----
+  const GULS = {
+    // Teke: a quartered octagon with a cross, tree motifs in each quarter, a star medallion, arrow stems top and bottom
+    T(x, y) {
+      const a = abs(x), b = abs(y), W = 27, H = 20, Cc = 11;
+      if (a === 0 && b > H && b <= H + 4) return 'N';                       // stems
+      if (b === H + 4 && a <= 2) return 'N';
+      if (b === H + 3 && a === 2) return 'N';
+      if (b === 0 && a > W && a <= W + 3) return 'N';                       // side stubs
+      if (a === W + 3 && b <= 2) return 'N';
+      // little teeth along the slanted edges
+      if (!oct(a, b, W, H, Cc) && a + b === W + H - Cc + 1 && a < W && b < H && (a - b + 100) % 4 === 0) return 'N';
+      if (!oct(a, b, W, H, Cc)) return null;
+      if (!oct(a, b, W - 1, H - 1, Cc)) return 'N';
+      if (!oct(a, b, W - 2, H - 2, Cc)) return (a + b) % 2 ? 'C' : 'K';     // a dotted cream / coral band
+      if (!oct(a, b, W - 3, H - 3, Cc)) return 'N';
+      // centre medallion
+      if (oct(a, b, 7, 6, 4)) {
+        if (!oct(a, b, 6, 5, 4)) return 'C';
+        return star(a, b, 'Y', 'N', 'C') || 'R';
+      }
+      if (oct(a, b, 8, 7, 4)) return 'N';
+      // the cross
+      if (a === 0 || b === 0) return 'C';
+      if (a === 1 || b === 1) return 'N';
+      const gold = (x > 0) === (y > 0);
+      // a tree in each quarter: diamond crown on a stepped trunk, leaning outward
+      const lx = a - 13, ly = b - 9, d = abs(lx) + abs(ly);
+      if (d <= 4) {
+        if (d === 0) return gold ? 'R' : 'Y';
+        if (d <= 2) return gold ? 'C' : 'R';
+        if (d === 3) return 'N';
+        return gold ? 'R' : 'N';
+      }
+      // small arrowheads pointing at the medallion and outward
+      if (abs(lx) + abs(ly) === 6 && (lx === 0 || ly === 0)) return 'N';
+      if (a === b && (a === 4 || a === 5)) return gold ? 'R' : 'N';
+      return gold ? 'Y' : 'C';
+    },
+    // Yomut: a hexagonal dyrnak gul with combs on its slanted edges and a stepped diamond core
+    Y(x, y) {
+      const a = abs(x), b = abs(y), R = 28, H = 21;
+      const hex = (n) => a + b <= R - n && b <= H - n;
+      // combs: short diagonal teeth growing out of the slanted edges, each ending in a hook
+      if (!hex(0) && b < H) {
+        const k = a + b - R, s = a - b;
+        if (k >= 1 && k <= 4 && ((s - k) % 6 + 6) % 6 === 0 && a >= 7) return 'C';
+        if (k === 4 && ((s - k + 2) % 6 + 6) % 6 === 0 && a >= 9) return 'C';
+      }
+      if (a <= 2 && b > H && b <= H + 3) return b === H + 3 || a === 0 ? 'Y' : null;   // crowns top and bottom
+      if (!hex(0)) return null;
+      if (!hex(1)) return 'C';
+      if (!hex(2)) return 'R';
+      if (!hex(3)) return (a + b) % 2 ? 'R' : 'Y';
+      if (!hex(4)) return 'R';
+      if (!hex(5)) return 'N';
+      // inner field: sky with a stepped diamond medallion
+      if (dia(a, b, 14)) {
+        const d = a + b;
+        if (d === 14) return 'N';
+        if (d >= 12) return 'Y';
+        if (d === 11) return 'N';
+        if (d >= 8) return 'R';
+        if (d === 7) return 'N';
+        if (d >= 4) return 'C';
+        if (d === 3) return 'N';
+        return (a === 0 || b === 0) ? 'M' : 'M';
+      }
+      // small plum diamonds on the axes, gold dots on the diagonals
+      if (abs(a - 17) + b <= 2) return abs(a - 17) + b === 2 ? 'N' : 'M';
+      if (a + abs(b - 15) <= 0) return 'M';
+      if (a === b && (a === 9 || a === 10)) return 'Y';
+      return 'B';
+    },
+    // Arsary: the gulli gul, a four-lobed cross with a diamond heart and trefoils between the lobes
+    E(x, y) {
+      const a = abs(x), b = abs(y);
+      const lobeIn = (n) => {
+        const r = 10 - n;
+        return (a <= 14 - n && b <= 14 - n) || oct(abs(a - 0), abs(b - 15), r, r, 4) || oct(abs(a - 15), abs(b - 0), r, r, 4);
+      };
+      // trefoils on the diagonals, pointing out
+      const td = abs(a - 19) + abs(b - 18);
+      if (td <= 3) return td === 0 ? 'P' : td === 1 ? 'C' : td === 2 ? 'T' : 'N';
+      if ((a === 19 && (b === 22 || b === 23)) || (b === 18 && (a === 23 || a === 24))) return 'T';
+      if (!lobeIn(0)) return null;
+      if (!lobeIn(1)) return 'N';
+      if (!lobeIn(2)) return 'C';
+      if (!lobeIn(3)) return 'N';
+      // lobe eyes
+      for (const [ex, ey] of [[0, 16], [16, 0]]) {
+        const d = abs(a - ex) + abs(b - ey);
+        if (d <= 3) return d === 3 ? 'N' : d === 0 ? 'P' : d === 1 ? 'C' : 'I';
+      }
+      // the heart: plum diamond with teal and rose rings
+      const d = a + b;
+      if (d <= 11) {
+        if (d === 11) return 'N';
+        if (d >= 9) return 'T';
+        if (d === 8) return 'N';
+        if (d >= 5) return 'M';
+        if (d === 4) return 'N';
+        if (d >= 2) return 'P';
+        return 'C';
+      }
+      // small stars in the lobe arms
+      const st = star(abs(a - 0), abs(b - 9), 'C', 'N', 'Y');
+      if (a < 3 && b > 11 && st) return 'C';
+      if ((a === 0 && b >= 12 && b <= 13) || (b === 0 && a >= 12 && a <= 13)) return 'C';
+      if (a === b && a >= 7 && a <= 11) return 'N';
+      return 'R';
+    },
+    // Chowdur: a stepped ertmen diamond with ram's horns at its four tips, quartered core
+    C(x, y) {
+      const a = abs(x), b = abs(y), R = 25;
+      // ram's horns beyond each tip
+      if (b === 0 || a === 0) {
+        const along = Math.max(a, b);
+        if (along > R && along <= R + 2) return 'Y';
+      }
+      for (const [ax2, bx2] of [[a, b], [b, a]]) {   // horns on the horizontal and vertical tips
+        const y2 = ax2 - (R + 3), x2 = bx2;
+        if (y2 >= 0 && y2 <= 3) { const h = horn(y2 === 3 ? 0 : x2, 0, null); }
+        if (ax2 === R + 3 && bx2 <= 3) return 'Y';
+        if (bx2 === 3 && ax2 >= R + 1 && ax2 <= R + 3) return 'Y';
+        if (bx2 === 2 && ax2 === R + 1) return 'Y';
+      }
+      if (!dia(a, b, R)) return null;
+      const d = a + b;
+      if (d === R) return 'N';
+      if (d === R - 1) return 'I';
+      if (d === R - 2) return (a % 2 ? 'L' : 'I');
+      if (d === R - 3) return 'I';
+      if (d === R - 4) return 'N';
+      // the core: walnut field with olive quarter diamonds and a plum star centre
+      if (d <= 9) {
+        if (d === 9) return 'N';
+        if (d === 8) return 'Y';
+        if (d === 7) return 'N';
+        return star(a, b, 'Y', 'C', 'P') || 'M';
+      }
+      if (a <= 1 || b <= 1) return a === 0 || b === 0 ? 'Y' : 'N';
+      const qd = abs(a - 7) + abs(b - 7);
+      if (qd <= 4) return qd === 4 ? 'N' : qd === 3 ? 'L' : qd === 0 ? 'C' : 'O';
+      if (a === b) return 'N';
+      return 'W';
+    },
+    // Saryk: a toothed octagon with a dotted frame and an eight-petal flower
+    S(x, y) {
+      const a = abs(x), b = abs(y), W = 26, H = 22, Cc = 11;
+      if (!oct(a, b, W, H, Cc) && a + b === W + H - Cc + 1 && a < W && b < H && (a - b + 100) % 4 === 2) return 'N';
+      if (!oct(a, b, W, H, Cc) && ((b === 0 && a <= W + 2) || (a === 0 && b <= H + 2))) return 'N';
+      if (!oct(a, b, W, H, Cc)) return null;
+      if (!oct(a, b, W - 1, H - 1, Cc)) return 'N';
+      if (!oct(a, b, W - 3, H - 3, Cc)) return (!oct(a, b, W - 2, H - 2, Cc) && (a + b) % 3 === 0) ? 'C' : 'R';
+      if (!oct(a, b, W - 4, H - 4, Cc)) return 'N';
+      if (!oct(a, b, W - 5, H - 5, Cc)) return 'S';
+      if (!oct(a, b, W - 6, H - 6, Cc)) return 'N';
+      // the flower: petals on the axes and diagonals
+      const d = a + b;
+      if (d <= 3) return d === 0 ? 'Y' : d <= 1 ? 'R' : d === 2 ? 'C' : 'N';
+      // axis petals
+      const ax = Math.min(a, b), al = Math.max(a, b);
+      if (ax <= 2 && al >= 4 && al <= 13) {
+        const w = al <= 6 ? al - 4 : al >= 11 ? 13 - al : 2;
+        if (ax <= w) return ax === w ? 'N' : 'T';
+      }
+      // diagonal petals
+      const off = abs(a - b), dl = a + b;
+      if (dl >= 8 && dl <= 22 && off <= 3) {
+        const w = dl <= 12 ? dl - 8 : dl >= 18 ? 22 - dl : 4;
+        if (off <= w) return off > w - 2 ? 'N' : dl >= 13 && dl <= 17 && off === 0 ? 'K' : 'R';
+      }
+      if (off === 0 && dl >= 24 && dl <= 26) return 'W';
+      if ((a === 15 && b === 0) || (a === 0 && b === 15)) return 'Y';
+      return 'C';
+    },
+  };
+  // tribes in the flag's order; each panel has its own ground and corner stars
+  const TRIBES = [
+    { key: 'T', name: 'Teke', ground: 'R', s: ['C', 'N', 'Y'], chain: ['Y', 'P'] },
+    { key: 'Y', name: 'Yomut', ground: 'N', s: ['Y', 'R', 'B'], chain: ['B', 'Y'] },
+    { key: 'E', name: 'Arsary', ground: 'C', s: ['T', 'N', 'P'], chain: ['M', 'T'] },
+    { key: 'C', name: 'Chowdur', ground: 'G', s: ['Y', 'N', 'I'], chain: ['L', 'I'] },
+    { key: 'S', name: 'Saryk', ground: 'O', s: ['N', 'W', 'C'], chain: ['K', 'Y'] },
+  ];
+
+  // ---- the border: a mitred frame so the bottom and side borders meet exactly in the corners ----
+  const BAND_C = 5;                  // band centre depth (depths 3..7)
+  const BAND_COLS = [['Y', 'T'], ['P', 'B'], ['I', 'M'], ['K', 'L']];
+  function band(u, v, k) {          // u along, v across, both centred on a motif; symmetric in u and v
+    const au = abs(u), av = abs(v), m = Math.max(au, av), cols = BAND_COLS[((k % 4) + 4) % 4];
+    if (m <= 2) {                    // a small octagon with a coloured cross
+      if (au === 2 && av === 2) return 'R';
+      if (m === 2) return 'N';
+      if (au + av === 0) return 'C';
+      if (au + av === 1) return cols[0];
+      return cols[1];
+    }
+    const dd = abs(au - PER / 2) + av;    // a diamond halfway between two octagons
+    if (dd === 0) return 'C'; if (dd === 1) return 'Y'; if (dd === 2) return 'N';
+    if (av === 2 && (au === 3 || au === PER - 3)) return 'N';
+    return 'R';
+  }
+  function frame(e, along, across) {
+    if (e === 0 || e === 2 || e === 8 || e === BW - 1) return 'N';
+    if (e === 1) return along % 2 ? 'C' : 'P';
+    if (e === 9) return (along % 4 === 0) ? 'Y' : (along % 4 === 2) ? 'T' : 'C';
+    const k = Math.round((along - BAND_C) / PER);
+    return band(along - BAND_C - k * PER, across - BAND_C, k);
+  }
+  // the knot colour at column x of carpet row r (row 0 is the very first, at the bottom)
+  function pat(x, r) { return fold(pat0(x, r)); }
+  function pat0(x, r) {
+    const bx = Math.min(x, COLS - 1 - x);
+    if (r < BW && r < bx) return frame(r, x, r);        // bottom border
+    if (bx < BW) return frame(bx, r, bx);               // side borders (and the corners)
+    const fr = r - START, p = Math.floor(fr / PH), y = PH - 1 - (fr % PH), tr = TRIBES[p % TRIBES.length], fx = x - BW;
+    const next = TRIBES[(p + 1) % TRIBES.length];
+    if (y < DIV) {  // the divider above each panel: navy lines around a chain of diamonds in both tribes' colours
+      if (y === 0 || y === DIV - 1) return 'N';
+      if (y === 1 || y === DIV - 2) return 'C';
+      const cx = fx - (FW - 1) / 2, a = abs(cx) + 3, u = a % 6 - 3, d = abs(u) + abs(y - 3);
+      const pick = Math.floor(a / 6) % 2 ? tr.chain : next.chain;
+      if (d === 0) return 'C'; if (d === 1) return pick[0]; if (d === 2) return pick[1];
+      return 'N';
+    }
+    const ly = y - DIV, inner = PH - DIV;
+    const gx = fx - (FW - 1) / 2, gy = ly - (inner - 1) / 2;
+    const g = GULS[tr.key](Math.round(gx), Math.round(gy));
+    if (g) return g;
+    // small stars in the panel's corners
+    const cx = Math.min(fx, FW - 1 - fx), cy = Math.min(ly, inner - 1 - ly);
+    const s = star(abs(cx - 4), abs(cy - 4), tr.s[0], tr.s[1], tr.s[2]);
+    if (s) return s;
+    return tr.ground;
+  }
+  // is knot x of row r part of a gul (or its ornaments)? the player weaves those rows' middles; helpers do the rest
+  function inGul(x, r) {
+    if (r < START) return false;
+    const bx = Math.min(x, COLS - 1 - x); if (bx < BW) return false;
+    const fr = r - START, p = Math.floor(fr / PH), y = PH - 1 - (fr % PH), tr = TRIBES[p % TRIBES.length];
+    if (y < DIV) return false;
+    const ly = y - DIV, inner = PH - DIV;
+    return !!GULS[tr.key](Math.round(x - BW - (FW - 1) / 2), Math.round(ly - (inner - 1) / 2));
+  }
+  const tribeAt = r => TRIBES[Math.max(0, Math.floor((r - START) / PH)) % TRIBES.length];
+  return { YARN, MIX, NAMES, BASIC, COLS, BW, FW, PH, DIV, START, TRIBES, pat, inGul, tribeAt, panelOf: r => Math.floor((r - START) / PH) };
+})();
+if (typeof module !== 'undefined') module.exports = CARPET;
+
+// Nagyş: one original dutar tune per gul, each in its own mode and feel. 32 beats each, four 8-beat phrases.
+// d = beats, p = scale step above the tune's base note.
+const TUNES = [
+  { name: 'Teke', feel: 'calm Dorian, the opening tune', base: 146.83, mode: [0, 2, 3, 5, 7, 9, 10], phr: [
+    [[1, 7], [.5, 6], [.5, 5], [1, 6], [1, 4], [.5, 5], [.5, 4], [1, 3], [2, 4]],
+    [[1, 7], [.5, 6], [.5, 5], [1, 6], [1, 4], [1, 3], [.5, 2], [.5, 1], [2, 0]],
+    [[.5, 4], [.5, 4], [1, 5], [.5, 3], [.5, 3], [1, 4], [1, 2], [1, 3], [2, 1]],
+    [[.5, 4], [.5, 5], [1, 6], [1, 5], [1, 4], [.5, 3], [.5, 2], [.5, 1], [.5, 2], [2, 0]],
+  ] },
+  { name: 'Yomut', feel: 'quick Phrygian, galloping eighths', base: 164.81, mode: [0, 1, 3, 5, 7, 8, 10], phr: [
+    [[.5, 4], [.5, 5], [.5, 4], [.5, 3], [1, 2], [1, 4], [.5, 3], [.5, 2], [.5, 1], [.5, 2], [2, 0]],
+    [[.5, 4], [.5, 5], [1, 7], [.5, 6], [.5, 5], [1, 4], [.5, 5], [.5, 4], [.5, 3], [.5, 2], [2, 4]],
+    [[1, 7], [.5, 8], [.5, 7], [1, 6], [1, 5], [.5, 6], [.5, 5], [.5, 4], [.5, 3], [2, 4]],
+    [[.5, 4], [.5, 3], [.5, 2], [.5, 1], [1, 2], [1, 3], [1, 1], [1, -1], [2, 0]],
+  ] },
+  { name: 'Arsary', feel: 'slow, singing minor with long notes', base: 196.0, mode: [0, 2, 3, 5, 7, 8, 10], phr: [
+    [[2, 4], [1, 3], [1, 2], [1.5, 3], [.5, 2], [2, 0]],
+    [[1, 2], [1, 3], [1, 4], [1, 5], [1.5, 6], [.5, 5], [2, 4]],
+    [[1.5, 7], [.5, 6], [1, 5], [1, 4], [1, 5], [1, 3], [2, 4]],
+    [[1, 4], [.5, 3], [.5, 2], [1, 3], [1, 1], [1.5, 2], [.5, 1], [2, 0]],
+  ] },
+  { name: 'Chowdur', feel: 'bouncy Mixolydian, a skipping long-short step', base: 164.81, mode: [0, 2, 4, 5, 7, 9, 10], phr: [
+    [[1.5, 4], [.5, 5], [1, 4], [1, 2], [1.5, 4], [.5, 5], [2, 7]],
+    [[1.5, 6], [.5, 5], [1, 4], [1, 5], [1.5, 4], [.5, 2], [2, 0]],
+    [[.5, 0], [.5, 2], [.5, 4], [.5, 5], [1.5, 7], [.5, 6], [1, 5], [1, 4], [2, 5]],
+    [[1.5, 4], [.5, 2], [1, 3], [1, 1], [1.5, 2], [.5, -1], [2, 0]],
+  ] },
+  { name: 'Saryk', feel: 'fiery Hijaz, the fastest and brightest', base: 146.83, mode: [0, 1, 4, 5, 7, 8, 10], phr: [
+    [[.5, 0], [.5, 1], [.5, 2], [.5, 3], [1, 4], [1, 4], [.5, 5], [.5, 4], [.5, 3], [.5, 2], [2, 3]],
+    [[.5, 4], [.5, 5], [.5, 6], [.5, 5], [1, 4], [1, 3], [.5, 2], [.5, 3], [.5, 2], [.5, 1], [2, 0]],
+    [[1, 7], [.5, 6], [.5, 5], [1, 6], [.5, 5], [.5, 4], [1, 5], [.5, 4], [.5, 3], [2, 4]],
+    [[.5, 4], [.5, 3], [.5, 2], [.5, 1], [1, 2], [.5, 1], [.5, 0], [1, 1], [1, -1], [2, 0]],
+  ] },
+];
+TUNES.forEach(T => { T.song = T.phr.flat().map(([d, p]) => ({ d, p: [p] })); });
+const tuneNote = (T, n) => { const L = T.mode.length, o = Math.floor(n / L), k = ((n % L) + L) % L; return T.base * Math.pow(2, o + T.mode[k] / 12); };
+if (typeof module !== 'undefined') module.exports = { TUNES, tuneNote };
+
+// NAGYŞ (v7.5): weave one endless Turkmen carpet to a dutar tune.
+// The carpet (carpet-design.js) is one long runner: a bottom border, then panel after panel, each tribe's gul on its
+// own ground, in the Turkmen flag's order. The helpers auto-weave the plain parts (the borders, the panel grounds and
+// dividers, and the edges of every row); you take over for each gul. One run of same-colour knots at a time slides
+// down its warp thread on the beat of the tune, along the row and back on the next row, like a weaver's hands.
+// Mixed colours (rose, coral, gold ...) are two yarns tapped together. Long runs are hold notes. Every gul is a bit
+// faster than the one before. Bad knots drain the carpet's quality; at zero the master stops the loom and you see the
+// carpet you wove. Endless: one run, one score.
+(() => {
+const CP = CARPET, COLS = CP.COLS, BW = CP.BW, YARN = CP.YARN;
+const ORDER = CP.BASIC || ['R', 'N', 'C', 'O', 'G'], NL = ORDER.length;   // the yarns you hold: one lane each
+// the yarns' names in Turkmen (Latin alphabet) under the buttons
+const TM = { R: 'GYZYL', N: 'GÖK', Y: 'SARY', C: 'AK' };
+const NAMES = Object.fromEntries(ORDER.map(k => [k, (CP.NAMES[k] || k).toUpperCase()]));
+const LANES = col => (CP.MIX[col] || [col]).map(k => ORDER.indexOf(k)).sort((a, b) => a - b);
+const TEST = { speed: 1, auto: false };
+const LEAD = 2.1, PERFECT = .1, GOOD = .24, SC = 2, SEG = 64;
+const HOLD_MIN = 6, HOLD_GAP = .5;                 // a hold ends half a beat before the next note, so you can lift
+const START_BPM = 100, STEP_BPM = 6, MAX_BPM = 150;
+const bpmOf = p => Math.min(MAX_BPM, START_BPM + p * STEP_BPM);
+const LIGHT = { C: 1, Y: 1, I: 1, B: 1, K: 1, P: 1, L: 1, O: 1, S: CP.BASIC ? 1 : 0 };
+const shown = col => col === 'N' ? '#34428a' : YARN[col];       // navy lifted a little so it reads on the dark loom
+
+// ---------- which knots the player weaves ----------
+// in a gul row, the player weaves from the gul's first knot to its last; the helpers tie the edges
+const spanCache = new Map();
+function spanOf(r) {
+  if (spanCache.has(r)) return spanCache.get(r);
+  let a = -1, b = -1;
+  for (let x = BW; x < COLS - BW; x++) if (CP.inGul(x, r)) { if (a < 0) a = x; b = x; }
+  const s = a < 0 ? null : [a, b];
+  spanCache.set(r, s); if (spanCache.size > 600) spanCache.delete(spanCache.keys().next().value);
+  return s;
+}
+const panelOf = r => Math.max(0, Math.floor((r - CP.START) / CP.PH));
+// every gul is mirror-symmetric, so you weave the left half of each gul row up to the middle knot, and the weaver
+// beside you mirrors each knot on the right half.
+const MID = (COLS - 1) / 2, mirror = x => COLS - 1 - x;
+// runs of same-colour knots in the player's half of a row, in weaving order (odd rows go back, middle to edge)
+function runsOf(r) {
+  const sp = spanOf(r); if (!sp) return [];
+  const out = []; let x = sp[0], end = Math.min(sp[1], MID);
+  while (x <= end) { const c = CP.pat(x, r); let n = 0; while (x + n <= end && CP.pat(x + n, r) === c) n++; out.push({ r, x0: x, n, col: c }); x += n; }
+  return r % 2 ? out.reverse() : out;
+}
+
+// ---------- the tune ----------
+// each gul has its own tune (tunes.js): Teke, Yomut, Arsary, Chowdur, Saryk
+const TU = i => TUNES[((i || 0) % TUNES.length + TUNES.length) % TUNES.length];
+const NOTE = (i, p, oct) => SND.note(TU(i).base * (oct || 1), TU(i).mode, p);
+
+let W, H, ks, kx, mapTop, mapRows, below, mapBot, hwTop, hitY;
+let streak, holding, autos, t, phase, notes, acc, gen, quality, combo, best, focus, smooth, gulsDone, pressT, lastJudge, flashes, cues;
+let knots, segs, laneDown, keyDown, woven;
+
+const G = {
+  id: 'knot',
+  resize(w, h) {
+    W = w; H = h; ks = Math.min(6, (W - 28) / COLS); kx = (W - COLS * ks) / 2;
+    mapTop = 8; mapRows = Math.floor((H < 700 ? 190 : 236) / ks); below = 5; mapBot = mapTop + mapRows * ks;
+    hwTop = mapBot + 34; hitY = H - 66;
+    segs && segs.clear();
+    if (knots) for (const [r, row] of knots) row.forEach((c, x) => { if (c) paint(x, r, c); });
+  },
+  init(w, h) {
+    knots = new Map(); segs = new Map();
+    G.resize(w, h);
+    t = -.4; phase = 'wait'; notes = []; acc = []; quality = QMAX; streak = 0; combo = 0; best = 0; focus = 0; smooth = 0; gulsDone = 0;
+    pressT = ORDER.map(() => 0); lastJudge = null; flashes = []; holding = null; autos = []; cues = [];
+    laneDown = new Map(); keyDown = new Set(); woven = 0;
+    gen = { row: 0, si: 0, tune: 0, beat: 0, time: 0, bpm: bpmOf(0), stage: null };
+    Shell.setMid('×1');
+  },
+  update(dt) {
+    pressT = pressT.map((v, i) => held(i) ? Math.max(v, .7) : Math.max(0, v - dt * 4));
+    flashes.forEach(f => f.t += dt); flashes = flashes.filter(f => f.t < .8);
+    smooth += (focus - smooth) * Math.min(1, dt * 6);
+    if (phase === 'wait') return;
+    dt *= TEST.speed; t += dt;
+    if (TEST.auto) for (const n of notes) { if (n.judged) continue; if (t >= n.time) judge(n, 'perfect'); break; }
+    generate(t + LEAD + 1);
+    while (acc.length && acc[0].time < t + .1) { const a = acc.shift(); if (a.time > t - .05) play(a, Math.max(0, a.time - t)); }
+    while (autos.length && autos[0].time <= t) autoRow(autos.shift());
+    if (holding) holdStep();
+    for (const n of notes) {
+      if (n.judged) continue;
+      if (t > n.time + GOOD) judge(n, n.got && n.got.size ? 'half' : 'miss'); else break;
+    }
+    notes = notes.filter(n => !n.judged || t - n.time - (n.hold ? n.dur : 0) < 1);
+  },
+  // the browser can cancel a touch (e.g. two fingers read as a gesture); a hold then finishes by itself
+  down(x, y, d) { const l = laneAt(x); if (d && d.id !== undefined) laneDown.set(d.id, l); press(l); },
+  up(x, y, d) { if (d && d.cancel && holding) holding.trust = true; const l = d && d.id !== undefined && laneDown.has(d.id) ? laneDown.get(d.id) : laneAt(x); if (d) laneDown.delete(d.id); lift(l); },
+  keyup(k) { const i = keyLane(k); if (i !== undefined) { keyDown.delete(i); lift(i); } },
+  key(k, e) {
+    const i = keyLane(k);
+    if (i !== undefined) { if (e && e.repeat) return; keyDown.add(i); press(i); return; }   // a held key must not tap again
+    if (k === ' ' && phase === 'wait') { press(-1); return; }
+    return false;
+  },
+  draw,
+};
+function keyLane(k) { const l = k.toLowerCase(), i = [NL === 4 ? '1234' : '12345', NL === 4 ? 'dfjk' : 'asdfg', NL === 4 ? 'asdf' : 'hjkl;'].map(s => s.indexOf(l)).find(v => v >= 0); return i; }
+function held(i) { if (keyDown.has(i)) return true; for (const v of laneDown.values()) if (v === i) return true; return false; }
+
+// ---------- the woven carpet: knots by row, drawn in segments of SEG rows ----------
+function seg(i) {
+  let s = segs.get(i); if (s) return s;
+  const px = ks * SC; s = { i };
+  s.chart = document.createElement('canvas'); s.chart.width = Math.ceil(COLS * px); s.chart.height = Math.ceil(SEG * px);
+  const m = s.chart.getContext('2d');
+  for (let rr = 0; rr < SEG; rr++) for (let x = 0; x < COLS; x++) { m.fillStyle = YARN[CP.pat(x, i * SEG + rr)]; m.fillRect(x * px, (SEG - 1 - rr) * px, px + .5, px + .5); }
+  s.wool = document.createElement('canvas'); s.wool.width = s.chart.width; s.wool.height = s.chart.height; s.wctx = s.wool.getContext('2d');
+  segs.set(i, s);
+  for (const k of [...segs.keys()]) if (k < i - 3) segs.delete(k);
+  // repaint knots already tied in this segment (if it was dropped and is needed again)
+  for (let rr = 0; rr < SEG; rr++) { const row = knots.get(i * SEG + rr); if (row) row.forEach((c, x) => { if (c) paintOn(s, x, i * SEG + rr, c); }); }
+  return s;
+}
+function tie(x, r, col) {
+  let row = knots.get(r); if (!row) { row = Array(COLS).fill(null); knots.set(r, row); }
+  if (!row[x]) woven++;
+  row[x] = col; paint(x, r, col);
+}
+function paint(x, r, col) { const i = Math.floor(r / SEG); if (segs.has(i) || Math.abs(r - focus) < 200) paintOn(seg(i), x, r, col); }
+function paintOn(s, x, r, col) {
+  const px = ks * SC, X = x * px, Y = (SEG - 1 - (r % SEG)) * px, m = s.wctx;
+  m.clearRect(X, Y, px, px);
+  if (col === 'X') { m.fillStyle = '#231a33'; m.fillRect(X, Y, px, px); m.fillStyle = 'rgba(232,217,180,.55)'; m.fillRect(X + px * .45, Y, 1.2, px); return; }
+  m.fillStyle = YARN[col]; m.fillRect(X, Y, px + .3, px + .3);
+  m.fillStyle = 'rgba(0,0,0,.2)'; m.fillRect(X, Y + px * .62, px, px * .38);
+  m.fillStyle = 'rgba(255,248,230,.13)'; m.fillRect(X + px * .1, Y + px * .08, px * .34, px * .38); m.fillRect(X + px * .56, Y + px * .08, px * .34, px * .38);
+}
+function weaveEdges(r) { const sp = spanOf(r), row = knots.get(r); for (let x = 0; x < COLS; x++) if (!sp || x < sp[0] || x > sp[1]) { if (!row || !row[x]) tie(x, r, CP.pat(x, r)); } }
+
+// ---------- the timeline: auto-weaving stretches and gul stretches ----------
+function generate(until) {
+  while (gen.time < until) {
+    if (!gen.stage) { planStage(); if (gen.stage.panel !== undefined && gen.stage.panel !== gen.tune) { gen.tune = gen.stage.panel; gen.si = 0; } }
+    const st = gen.stage, bl = 60 / gen.bpm;
+    if (st.kind === 'auto') {
+      // the tune plays by itself while the helpers weave; then: are you ready? 3, 2, 1
+      // the whole stretch is laid out at once, so its rows and banners are timed from its start
+      do {
+        const S = TU(gen.tune).song, ev = S[gen.si]; gen.si = (gen.si + 1) % S.length;
+        ev.p.forEach((p, i) => acc.push({ time: gen.time + i * ev.d * bl / ev.p.length, mel: p, soft: true, tu: gen.tune }));
+        tick(bl, ev.d);
+      } while (!(gen.beat - st.b0 >= st.beats - 1e-6 && Math.abs(gen.beat % 4) < 1e-6));
+      {
+        const T0 = st.t0, Tend = gen.time, n = st.rows.length, span = Math.max(bl, (Tend - T0) - 7 * bl);
+        st.rows.forEach((r, i) => autos.push({ time: T0 + (i + 1) * span / (n + 1), r }));
+        autos.sort((a, b) => a.time - b.time);
+        cues.push({ time: T0, kind: 'auto' });
+        cues.push({ time: Tend - 6 * bl, kind: 'ready', faster: st.panel > 0 });
+        for (let k = 3; k >= 1; k--) cues.push({ time: Tend - k * bl, kind: 'count', n: k });
+        cues.push({ time: Tend, kind: 'go', until: Tend + 1 });
+        cues.sort((a, b) => a.time - b.time);
+        gen.stage = null;
+      }
+      continue;
+    }
+    // a gul stretch: one note per run
+    if (st.i >= st.runs.length) { gen.stage = null; continue; }
+    const run = st.runs[st.i++], next = st.runs[st.i], time = gen.time, pitches = [];
+    let beats = 0;
+    const take = () => { const S = TU(gen.tune).song, e = S[gen.si]; gen.si = (gen.si + 1) % S.length; e.p.forEach((p, i) => pitches.push({ p, off: (gen.time - time) + i * e.d * bl / e.p.length })); beats += e.d; tick(bl, e.d); };
+    take();
+    const lanes = LANES(run.col), isHold = run.n >= HOLD_MIN;
+    const want = isHold ? Math.min(3, Math.max(2, Math.round(run.n / 3))) : 0;
+    // long runs hold longer; and the same yarn twice in a row is never closer than one beat
+    const shares = next && LANES(next.col).some(l => lanes.includes(l));
+    while (beats < want - 1e-6 || (shares && beats < 1 - 1e-6)) take();
+    const dur = isHold ? (beats - HOLD_GAP) * bl : 0;
+    notes.push(Object.assign({ time, lanes, pitches, dur, hold: isHold, judged: false, panel: st.panel, last: st.i >= st.runs.length }, run));
+  }
+}
+// work out the next stretch: plain rows (the helpers weave) or gul rows (you weave)
+function planStage() {
+  const r0 = gen.row;
+  if (!spanOf(r0)) {
+    const rows = []; let r = r0;
+    while (!spanOf(r)) rows.push(r++);
+    gen.row = r;
+    const p = panelOf(r);
+    gen.bpm = bpmOf(p);
+    gen.stage = { kind: 'auto', rows, t0: gen.time, b0: gen.beat, beats: Math.max(12, Math.ceil(rows.length / 2) + 7), panel: p };
+    return;
+  }
+  const runs = []; let r = r0;
+  while (spanOf(r)) {
+    const rr = runsOf(r);
+    // at the turn of a row, the same colour on both rows is one note
+    const prev = runs[runs.length - 1];
+    if (prev && rr.length && prev.col === rr[0].col && !prev.merged) {
+      const first = rr.shift(); prev.parts = [{ r: prev.r, x0: prev.x0, n: prev.n }, { r: first.r, x0: first.x0, n: first.n }]; prev.n += first.n; prev.merged = true;
+    }
+    rr.forEach(u => runs.push(u));
+    r++;
+  }
+  runs.forEach(u => { if (!u.parts) u.parts = [{ r: u.r, x0: u.x0, n: u.n }]; });
+  gen.row = r;
+  gen.stage = { kind: 'gul', runs, i: 0, panel: panelOf(r0) };
+}
+// advance the song clock by d beats, queueing the drone on each beat and a soft strum between
+function tick(bl, d) {
+  const b0 = gen.beat, b1 = b0 + d;
+  for (let h = Math.ceil(b0 * 2 - 1e-6); h < b1 * 2 - 1e-6; h++) acc.push({ time: gen.time + (h / 2 - b0) * bl, half: h % 2, bar: Math.floor(h / 2) % 4, tu: gen.tune });
+  acc.sort((a, b) => a.time - b.time);
+  gen.beat = b1; gen.time += d * bl;
+}
+function play(a, at) {
+  if (a.mel !== undefined) { if (a.hold && a.hold.state !== 'holding') return; dutar(NOTE(a.tu, a.mel), 1.2, { vol: a.soft ? .06 : .09, bright: .55, at, verb: .25 }); return; }
+  if (a.half) { [TU(a.tu).base * 2, TU(a.tu).base * 3].forEach((f, i) => SND.pluck(f, .35, { vol: .022, bright: .35, at: at + i * .012, verb: .1 })); return; }
+  const f = a.bar === 2 ? TU(a.tu).base * .75 : TU(a.tu).base / 2;
+  SND.pluck(f, .9, { vol: a.bar === 0 ? .07 : .045, bright: .3, damp: .997, at, verb: .15 });
+  if (a.bar === 0) SND.noise(.06, { filter: 'lowpass', freq: 240, vol: .05, at });
+}
+function autoRow(a) { for (let x = 0; x < COLS; x++) tie(x, a.r, CP.pat(x, a.r)); focus = Math.max(focus, a.r + 1); }
+
+// ---------- tying knots ----------
+// the knots of a note in weaving order, across the row turn if it has one
+function knotList(n) {
+  if (n.list) return n.list;
+  const out = [];
+  n.parts.forEach(p => { for (let i = 0; i < p.n; i++) out.push([p.r % 2 ? p.x0 + p.n - 1 - i : p.x0 + i, p.r]); });
+  return (n.list = out);
+}
+function tieSome(n, upto, col) {
+  const L = knotList(n), from = n.done || 0;
+  for (let i = from; i < Math.min(upto, L.length); i++) { const [x, r] = L[i]; n.edged = n.edged || new Set(); if (!n.edged.has(r)) { n.edged.add(r); weaveEdges(r); } tie(x, r, col); if (mirror(x) !== x) tie(mirror(x), r, col === n.col ? CP.pat(mirror(x), r) : col); }
+  n.done = Math.max(from, upto);
+}
+function holdStep() {
+  const n = holding, p = clamp((t - n.time) / n.dur, 0, 1), upto = Math.max(1, Math.ceil(p * n.n));
+  if (upto > n.done) {
+    Shell.add(2 * (upto - n.done) * mult());
+    tieSome(n, upto, n.col);
+    const [x, r] = knotList(n)[upto - 1];
+    burst(kx + (x + .5) * ks, rowY(r) + ks / 2, 2, [YARN[n.col], '#ffcf5a'], { v0: 10, v1: 40, gr: 40, r0: .8, r1: 1.6 });
+  }
+  n.lanes.forEach(l => { if (Math.random() < .4) burst(laneX(l, hitY), hitY, 1, ['#ffcf5a', YARN[n.col]], { v0: 30, v1: 90, gr: 120, up: 60, r0: 1, r1: 2 }); });
+  // a hold keeps going while any of its yarns is held; a finger slipping off for a moment doesn't break it
+  if (!TEST.auto && !n.trust) {
+    if (n.lanes.some(held)) n.lastHeld = t;
+    else if (t - (n.lastHeld === undefined ? n.time : n.lastHeld) > .15) { finishHold(p >= .6); return; }
+  }
+  if (p >= 1) finishHold(true);
+}
+function lift(lane) { /* holdStep notices when no finger is left on a hold's yarns */ }
+function finishHold(ok) {
+  const n = holding; holding = null;
+  if (ok) { tieSome(n, n.n, n.col); n.state = 'done'; Shell.add(25); floatText('HOLD +25', W / 2, hitY - 84, C.gold, 13); }
+  else {
+    n.state = 'broken'; tieSome(n, n.n, 'X'); combo = 0; lose(); Shell.setMid('×1');
+    lastJudge = { res: 'letgo', at: performance.now() }; SND.noise(.12, { filter: 'lowpass', freq: 300, vol: .07 });
+    if (quality <= 0) { gameOver(); return; }
+  }
+  if (n.last) gulDone(n);
+}
+// quality: ten squares. Every mistake takes one away; every 20 good knots since the last refill fill them all again.
+const QMAX = 15, REFILL = 50;
+function lose() { quality = Math.max(0, quality - 1); }
+function gain() { if (quality >= QMAX) { streak = 0; return; } if (++streak >= REFILL) { quality++; streak = 0; floatText('+1 QUALITY', W / 2, mapBot + 40, '#7ad18a', 12); } }
+const mult = () => Math.min(4, 1 + Math.floor(combo / 10));
+function laneAt(x) { const w = W - 20; return clamp(Math.floor((x - (W - w) / 2) / (w / NL)), 0, NL - 1); }
+function press(lane) {
+  if (phase === 'wait') { phase = 'play'; t = 0; return; }
+  if (lane < 0 || phase !== 'play') return;
+  pressT[lane] = 1;
+  const n = notes.find(m => !m.judged);
+  if (!n || Math.abs(n.time - t) > GOOD) { SND.tone(220 + lane * 30, .05, { vol: .015 }); return; }
+  if (!n.lanes.includes(lane)) { judge(n, 'wrong', lane); return; }
+  if (n.lanes.length === 2) {   // a mixed colour: both yarns, close together
+    (n.got = n.got || new Map()).set(lane, t);
+    if (n.got.size < 2) return;
+  }
+  judge(n, Math.abs(n.time - t) <= PERFECT ? 'perfect' : 'good');
+}
+function judge(n, res, lane) {
+  if (phase !== 'play') return;
+  n.judged = true; n.res = res;
+  const ok = res === 'perfect' || res === 'good';
+  const col = ok ? n.col : res === 'miss' ? 'X' : res === 'half' ? ORDER[[...n.got.keys()][0]] : ORDER[lane];
+  if (ok && n.hold) { n.state = 'holding'; n.done = 0; holding = n; tieSome(n, 1, n.col); n.pitches.slice(1).forEach(q => acc.push({ time: n.time + q.off, mel: q.p, hold: n })); acc.sort((a, b) => a.time - b.time); }
+  else tieSome(n, n.n, col);
+  if (ok) {
+    combo++; best = Math.max(best, combo);
+    Shell.add(5 * n.n * mult() * (res === 'perfect' ? 1.5 : 1) * (n.lanes.length > 1 ? 1.5 : 1));
+    gain();
+    (n.hold ? n.pitches.slice(0, 1) : n.pitches).forEach(q => dutar(NOTE(n.panel, q.p), 1.3, { vol: .13, bright: .6, damp: .996, verb: .25, at: q.off }));
+    n.lanes.forEach(l => burst(laneX(l, hitY), hitY, res === 'perfect' ? 12 : 7, [YARN[n.col], '#ffcf5a', '#f1e8d4'], { v0: 40, v1: 150, gr: 200, r0: 1.2, r1: 2.6 }));
+    const [x, r] = knotList(n)[0];
+    burst(kx + (x + .5) * ks, rowY(r) + ks / 2, 5, [YARN[n.col], '#ffcf5a'], { v0: 20, v1: 70, gr: 60, r0: 1, r1: 2 });
+  } else {
+    combo = 0; lose();
+    if (res === 'wrong' || res === 'half') SND.pluck(NOTE(n.panel, n.pitches[0].p) * 1.06, .4, { vol: .09, bright: .9 });
+    else SND.noise(.12, { filter: 'lowpass', freq: 300, vol: .07 });
+  }
+  n.parts.forEach(p => { flashes.push({ row: p.r, x0: p.x0, n: p.n, t: 0, ok }); if (p.x0 + p.n - 1 < MID) flashes.push({ row: p.r, x0: mirror(p.x0 + p.n - 1), n: p.n, t: 0, ok }); });
+  lastJudge = { res, at: performance.now() };
+  Shell.setMid('×' + mult());
+  const nx = notes.find(m => !m.judged); focus = Math.max(focus, nx ? nx.parts[0].r : n.parts[n.parts.length - 1].r + 1);
+  if (quality <= 0) { gameOver(); return; }
+  if (n.last && !(ok && n.hold)) gulDone(n);
+}
+function gulDone(n) {
+  gulsDone++; Shell.add(300);
+  Shell.toast(CP.TRIBES[n.panel % 5].name + ' gul woven! +300');
+  [0, 2, 4, 7].forEach((p, i) => dutar(NOTE(n.panel, p + 2), 1.6, { vol: .09, at: .1 + i * .12, verb: .4 }));
+}
+function gameOver() {
+  if (phase === 'over') return;
+  quality = 0; phase = 'over';
+  [4, 3, 1, 0].forEach((p, i) => dutar(NOTE(gen.tune, p, .5), 1.4, { vol: .09, at: .2 + i * .28 }));
+  Shell.over('The master stopped the loom', 'Weave again', carpetCard);
+}
+// the game-over card shows the carpet woven so far (the last few panels, if it is long)
+function carpetCard() {
+  let top = 1; for (const k of knots.keys()) top = Math.max(top, k + 1);
+  const r0 = Math.max(0, top - 3 * CP.PH - CP.START);
+  const n = top - r0, s = Math.max(1.5, Math.min(4, 300 / n)), pad = 8, fringe = r0 === 0 ? 12 : 0;
+  const cv = document.createElement('canvas'); cv.width = Math.round(COLS * s + 2 * pad); cv.height = Math.round(n * s + 2 * pad + fringe);
+  const m = cv.getContext('2d');
+  m.fillStyle = '#120d22'; m.fillRect(0, 0, cv.width, cv.height);
+  for (let r = r0; r < top; r++) {
+    const row = knots.get(r) || [];
+    for (let x = 0; x < COLS; x++) {
+      const c = row[x], X = pad + x * s, Y = pad + (top - 1 - r) * s;
+      if (!c) { if (x % 2 === 0) { m.fillStyle = 'rgba(232,217,180,.18)'; m.fillRect(X + s * .4, Y, 1, s); } continue; }
+      m.fillStyle = c === 'X' ? '#231a33' : YARN[c]; m.fillRect(X, Y, s + .3, s + .3);
+    }
+  }
+  if (fringe) { m.strokeStyle = '#e8d9b4'; m.lineWidth = 1; for (let x = 0; x < COLS; x += 1.5) { m.beginPath(); m.moveTo(pad + x * s, pad + n * s); m.lineTo(pad + x * s + (x % 3 - 1), cv.height - 2); m.stroke(); } }
+  return `<img src="${cv.toDataURL()}" alt="The carpet you wove" style="display:block;max-width:100%;max-height:min(44vh,340px);border-radius:4px;box-shadow:0 6px 18px rgba(0,0,0,.5)"><p class="muted" style="font-size:12px">${gulsDone} gul${gulsDone === 1 ? '' : 's'} woven · ${top} rows · ${woven.toLocaleString('en-US')} knots</p>`;
+}
+
+// ---------- drawing ----------
+function laneX(i, y) { const u = clamp((hitY - y) / (hitY - hwTop), -.3, 1), w = lerp(W - 20, 200, u); return W / 2 - w / 2 + (i + .5) * w / NL; }
+function rowY(r) { return mapTop + (mapRows - below - 1 - (r - smooth)) * ks; }
+
+function draw() {
+  bgNight(W, H);
+  drawMap(); drawStrip(); drawHighway();
+  drawParts(); drawFloats(); drawCues();
+  if (phase === 'wait') {
+    rr(24, hwTop + 30, W - 48, 128, 12, 'rgba(12,16,32,.95)', '#4a2a2e', 1.5);
+    g.textAlign = 'center'; g.font = '12px Bungee, sans-serif'; g.fillStyle = C.gold; g.fillText('WEAVE TO THE DUTAR', W / 2, hwTop + 54);
+    g.font = '13px Rubik, sans-serif'; g.fillStyle = C.fg;
+    g.fillText('Tap the yarn as its knots reach the line.', W / 2, hwTop + 78);
+    g.fillText('Hold long ones. Two-colour notes: two fingers.', W / 2, hwTop + 98);
+    g.fillStyle = C.muted; g.fillText('Tap anywhere to start · keys 1–' + NL + '', W / 2, hwTop + 124); g.textAlign = 'left';
+  }
+}
+function drawMap() {
+  const cw = COLS * ks, mh = mapRows * ks;
+  g.fillStyle = '#5a3a1e'; g.fillRect(kx - 10, mapTop - 4, 7, mh + 8); g.fillRect(kx + cw + 3, mapTop - 4, 7, mh + 8);
+  g.save(); g.beginPath(); g.rect(kx, mapTop, cw, mh); g.clip();
+  g.fillStyle = '#120d22'; g.fillRect(kx, mapTop, cw, mh);
+  warp(kx + ks / 2, kx + cw, mapTop, mapBot, ks * 2, .2);
+  if (rowY(-1) < mapBot) for (let i = 1; i <= 6; i++) { g.fillStyle = i % 2 ? '#7d1a22' : '#5a1218'; g.fillRect(kx, rowY(-i), cw, ks); }
+  const lo = Math.floor((smooth - below - 2) / SEG), hi = Math.floor((smooth + mapRows) / SEG), px = ks * SC;
+  for (let i = Math.max(0, lo); i <= hi; i++) {
+    const s = seg(i), top = rowY(i * SEG + SEG - 1);
+    g.globalAlpha = .4; g.drawImage(s.chart, kx, top, cw, SEG * ks); g.globalAlpha = 1;
+    const cr = Math.floor(focus) - i * SEG;
+    if (cr >= 0 && cr < SEG) { const sy = (SEG - 1 - cr) * px; g.drawImage(s.chart, 0, sy, s.chart.width, px, kx, rowY(Math.floor(focus)), cw, ks); }
+    g.drawImage(s.wool, kx, top, cw, SEG * ks);
+  }
+  flashes.forEach(f => { const y = rowY(f.row), a = 1 - f.t / .8; g.strokeStyle = f.ok ? `rgba(255,207,90,${a})` : `rgba(255,110,90,${a})`; g.lineWidth = 1.5; g.strokeRect(kx + f.x0 * ks - f.t * 3, y - f.t * 3, f.n * ks + f.t * 6, ks + f.t * 6); });
+  const cur = notes.find(m => !m.judged);
+  if (cur) {
+    const pulse = .6 + .4 * Math.sin(performance.now() / 120);
+    cur.parts.forEach(p => { const y = rowY(p.r); g.save(); g.shadowColor = 'rgba(255,207,90,1)'; g.shadowBlur = 8; g.strokeStyle = `rgba(255,207,90,${pulse})`; g.lineWidth = 2; g.strokeRect(kx + p.x0 * ks - 1, y - 1, p.n * ks + 2, ks + 2); g.strokeStyle = `rgba(255,207,90,${pulse * .45})`; g.lineWidth = 1; const mx = mirror(p.x0 + p.n - 1); if (mx > p.x0 + p.n - 1) g.strokeRect(kx + mx * ks - 1, y - 1, p.n * ks + 2, ks + 2); g.restore(); });
+    const p = cur.parts[0], dir = p.r % 2 ? -1 : 1, y = rowY(p.r);
+    const ax = dir > 0 ? kx + (p.x0 + p.n) * ks + 3 : kx + p.x0 * ks - 3, ay = y + ks / 2;
+    fillP(g, [[ax + dir * 6, ay], [ax, ay - 4], [ax, ay + 4]], C.gold);
+  }
+  g.restore();
+  const bgr = g.createLinearGradient(0, mapTop - 6, 0, mapTop + 2); bgr.addColorStop(0, '#8d5d34'); bgr.addColorStop(1, '#4a2e18'); g.fillStyle = bgr; g.fillRect(kx - 12, mapTop - 6, cw + 24, 8);
+  const fade = g.createLinearGradient(0, mapBot - ks * 4, 0, mapBot); fade.addColorStop(0, 'rgba(12,16,32,0)'); fade.addColorStop(1, 'rgba(12,16,32,.8)'); g.fillStyle = fade; g.fillRect(kx, mapBot - ks * 4, cw, ks * 4);
+  rr(kx - 12, mapBot - 2, cw + 24, 9, 4, '#6a4426', '#3a2210');
+}
+function drawStrip() {
+  const y = mapBot + 12, n = QMAX, sz = 13, gap = 4, x0 = 14 + 62;
+  g.font = '9px Bungee, sans-serif'; g.fillStyle = C.muted; g.textAlign = 'left'; g.fillText('QUALITY', 14, y + 10);
+  for (let i = 0; i < n; i++) {
+    const x = x0 + i * (sz + gap), on = i < quality;
+    rr(x, y, sz, sz, 3, on ? (quality <= 3 ? '#ff6a5a' : '#5cc274') : 'rgba(42,53,102,.6)', on ? 'rgba(255,255,255,.35)' : 'rgba(166,171,207,.25)', 1);
+  }
+  // progress towards the next refill
+  if (quality < n) { const w = n * (sz + gap) - gap; rr(x0, y + sz + 3, w, 3, 1.5, 'rgba(42,53,102,.6)'); rr(x0, y + sz + 3, w * streak / REFILL, 3, 1.5, '#7ad18a'); }
+}
+// one warp thread of the loom: a cream two-ply wool cord with its twist showing
+function warpCord(xa, ya, xb, yb, wa, wb) {
+  const at = y => { const u = (y - ya) / (yb - ya); return [lerp(xa, xb, u), lerp(wa, wb, u)]; };
+  const [, w0] = at(ya), [, w1] = at(yb), nx = (yb - ya), ny = -(xb - xa), L = Math.hypot(nx, ny), ox = nx / L, oy = ny / L;
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,.45)'; g.shadowBlur = 4; g.shadowOffsetY = 1;
+  fillP(g, [[xa - ox * w0 / 2, ya - oy * w0 / 2], [xa + ox * w0 / 2, ya + oy * w0 / 2], [xb + ox * w1 / 2, yb + oy * w1 / 2], [xb - ox * w1 / 2, yb - oy * w1 / 2]], '#cdb98f');
+  g.restore();
+  // the plies: diagonal twists, each one a light ridge with a dark groove behind it
+  g.lineCap = 'round';
+  for (let y = yb; y > ya + 1;) {
+    const [x, w] = at(y), h = w * .95;
+    g.strokeStyle = 'rgba(92,66,36,.55)'; g.lineWidth = Math.max(.6, w * .16);
+    g.beginPath(); g.moveTo(x - w * .46, y); g.lineTo(x + w * .46, y - h); g.stroke();
+    g.strokeStyle = 'rgba(250,240,214,.75)'; g.lineWidth = Math.max(.5, w * .22);
+    g.beginPath(); g.moveTo(x - w * .4, y - h * .42); g.lineTo(x + w * .3, y - h * 1.12); g.stroke();
+    y -= h;
+  }
+  // a soft edge shade on one side so the cord reads round
+  g.strokeStyle = 'rgba(70,48,26,.35)'; g.lineWidth = 1.2;
+  g.beginPath(); g.moveTo(xa + ox * w0 * .45, ya + oy * w0 * .45); g.lineTo(xb + ox * w1 * .45, yb + oy * w1 * .45); g.stroke();
+  g.lineCap = 'butt';
+}
+// the loom below the carpet: five warp threads, one per yarn; the knots slide down them
+function drawHighway() {
+  const top = hwTop, bot = hitY + 26, wt = 200, wb = W - 20;
+  const p = (u, x) => [W / 2 + (x - .5) * lerp(wb, wt, u), lerp(bot, top, u)];
+  const grd = g.createLinearGradient(0, top, 0, bot); grd.addColorStop(0, 'rgba(26,21,48,.15)'); grd.addColorStop(1, 'rgba(26,21,48,.92)');
+  fillP(g, [p(1, 0), p(1, 1), p(0, 1), p(0, 0)], grd);
+  ORDER.forEach((k, i) => { const a = pressT[i]; if (a > 0) { g.globalAlpha = a * .3; fillP(g, [p(1, i / NL), p(1, (i + 1) / NL), p(0, (i + 1) / NL), p(0, i / NL)], shown(k)); g.globalAlpha = 1; } });
+  // the weft passes: faint lines on the beat
+  acc.forEach(a => { if (a.half || a.mel !== undefined) return; const u = (a.time - t) / LEAD; if (u < 0 || u > 1) return; const y = lerp(hitY, top, u), w = lerp(wb, wt, u); g.strokeStyle = `rgba(241,232,212,${a.bar === 0 ? .13 : .05})`; g.beginPath(); g.moveTo(W / 2 - w / 2, y); g.lineTo(W / 2 + w / 2, y); g.stroke(); });
+  // the five warp threads: thick twisted wool cords, thinner as they run back to the heddle
+  ORDER.forEach((k, i) => { const [a, b] = p(1, (i + .5) / NL), [c, d] = p(0, (i + .5) / NL); warpCord(a, b, c, d, 3.2, 9); });
+  rr(W / 2 - wt / 2 - 14, top - 6, wt + 28, 8, 4, '#6a4426', '#3a2210');   // the heddle bar the threads come from
+  for (let i = notes.length - 1; i >= 0; i--) {
+    const n = notes[i], isHeld = n.state === 'holding';
+    if (n.judged && n.res !== 'miss' && !(n.hold && n.state === 'broken' && t < n.time + n.dur) && !isHeld) continue;
+    if (n.hold) { const ue = (n.time + n.dur - t) / LEAD; if (ue > -.05) n.lanes.forEach(l => tail(n, l, isHeld ? 0 : (n.time - t) / LEAD, ue, n.state === 'broken' || n.res === 'miss' || n.res === 'wrong' || n.res === 'half')); }
+    if (isHeld) { const pulse = .5 + .5 * Math.sin(performance.now() / 70); g.save(); g.shadowColor = 'rgba(255,207,90,1)'; g.shadowBlur = 18 * pulse; drawNote(n, hitY, 1, n.n - n.done); g.restore(); continue; }
+    const u = (n.time - t) / LEAD; if (u > 1.02 || u < -.25) continue;
+    const y = lerp(hitY, top, u), s = lerp(1, .5, clamp(u, 0, 1));
+    g.globalAlpha = n.judged ? .35 : u > .85 ? (1.02 - u) / .17 : 1;
+    drawNote(n, y, s, n.n);
+    g.globalAlpha = 1;
+  }
+  ORDER.forEach((k, i) => {
+    const x = laneX(i, hitY), a = pressT[i];
+    g.strokeStyle = a > 0 ? C.gold : 'rgba(241,232,212,.35)'; g.lineWidth = 2; g.beginPath(); g.arc(x, hitY, 25 + a * 3, 0, 7); g.stroke();
+    if (a > 0) { g.save(); g.shadowColor = 'rgba(255,207,90,.9)'; g.shadowBlur = 16 * a; dotC(g, x, hitY, 24, 'rgba(255,207,90,.2)'); g.restore(); }
+    yarnBall(x, hitY + a * 2, 20, k);
+    g.font = '10px Bungee, sans-serif'; g.textAlign = 'center'; g.fillStyle = C.muted; g.fillText(TM[k] || NAMES[k], x, hitY + 42); g.textAlign = 'left';
+  });
+  if (lastJudge) {
+    const age = (performance.now() - lastJudge.at) / 1000;
+    if (age < .7) {
+      const txt = { perfect: 'PERFECT', good: 'GOOD', wrong: 'WRONG YARN', miss: 'MISSED', letgo: 'LET GO TOO SOON', half: 'NEEDS BOTH YARNS' }[lastJudge.res], col = lastJudge.res === 'perfect' ? C.gold : lastJudge.res === 'good' ? C.fg : '#ff8a6a';
+      g.globalAlpha = 1 - age / .7; g.font = '16px Bungee, sans-serif'; g.textAlign = 'center'; g.fillStyle = '#3a1410'; g.fillText(txt, W / 2, hitY - 62 - age * 20 + 2); g.fillStyle = col; g.fillText(txt, W / 2, hitY - 62 - age * 20);
+      if (combo >= 5 && (lastJudge.res === 'perfect' || lastJudge.res === 'good')) { g.font = '11px Bungee, sans-serif'; g.fillStyle = C.saffron; g.fillText(combo + ' IN A ROW', W / 2, hitY - 44 - age * 20); }
+      g.textAlign = 'left'; g.globalAlpha = 1;
+    }
+  }
+}
+// a ball of wool: strands wound round in several directions, shaded like a sphere, with a loose end
+const ballCache = new Map();
+function yarnBall(x, y, r, k) {
+  const sc = 3, key = k + r;
+  if (!ballCache.has(key)) {
+    const S = Math.ceil((r * 2 + 10) * sc), c = document.createElement('canvas'); c.width = c.height = S;
+    const m = c.getContext('2d'); m.scale(sc, sc); const o = r + 5, col = shown(k);
+    // the loose end, trailing down-right behind the ball
+    m.strokeStyle = col; m.lineWidth = 1.6; m.lineCap = 'round';
+    m.beginPath(); m.moveTo(o + r * .5, o + r * .8); m.bezierCurveTo(o + r * 1.1, o + r * 1.05, o + r * .7, o + r * 1.25, o + r * 1.15, o + r * 1.3); m.stroke();
+    m.save(); m.beginPath(); m.arc(o, o, r, 0, 7); m.clip();
+    m.fillStyle = col; m.fillRect(0, 0, o * 2, o * 2);
+    const rnd = rng(k.charCodeAt(0) * 31 + r);
+    // three layers of wound strands, each a family of parallel arcs at its own angle
+    // two bands of strands wound across each other, the top band only over part of the ball
+    [[-.6, 1.25, 1], [.75, .62, .7]].forEach(([ang, reach, a]) => {
+      m.save(); m.translate(o, o); m.rotate(ang + rnd() * .2);
+      if (reach < 1) { m.beginPath(); m.rect(-r * 1.3, -r * reach, r * 2.6, r * reach * 1.6); m.clip(); }
+      for (let i = -r * 1.05; i < r * 1.05; i += 3.4) {
+        const bend = r * .42 * (1 - (i / r) ** 2);
+        m.strokeStyle = `rgba(0,0,0,${.3 * a})`; m.lineWidth = 2.4; m.beginPath(); m.moveTo(-r * 1.2, i + 1); m.quadraticCurveTo(0, i + 1 - bend, r * 1.2, i + 1); m.stroke();
+        m.strokeStyle = col; m.lineWidth = 2; m.beginPath(); m.moveTo(-r * 1.2, i); m.quadraticCurveTo(0, i - bend, r * 1.2, i); m.stroke();
+        m.strokeStyle = `rgba(255,248,230,${.22 * a})`; m.lineWidth = .7; m.beginPath(); m.moveTo(-r * 1.2, i - .5); m.quadraticCurveTo(0, i - .5 - bend, r * 1.2, i - .5); m.stroke();
+      }
+      m.restore();
+    });
+    // sphere shading: light from the top left, a soft rim shadow, a little fuzz
+    const sh = m.createRadialGradient(o - r * .35, o - r * .4, r * .1, o, o, r * 1.05);
+    sh.addColorStop(0, 'rgba(255,250,235,.28)'); sh.addColorStop(.45, 'rgba(255,250,235,0)'); sh.addColorStop(1, 'rgba(0,0,0,.45)');
+    m.fillStyle = sh; m.fillRect(0, 0, o * 2, o * 2);
+    m.restore();
+    m.strokeStyle = 'rgba(255,248,230,.18)'; m.lineWidth = .6;
+    for (let i = 0; i < 26; i++) { const a = rnd() * 6.283, l = 1 + rnd() * 2; m.beginPath(); m.moveTo(o + Math.cos(a) * r, o + Math.sin(a) * r); m.lineTo(o + Math.cos(a + .1) * (r + l), o + Math.sin(a + .1) * (r + l)); m.stroke(); }
+    ballCache.set(key, c);
+  }
+  const c = ballCache.get(key), s = c.width / sc;
+  g.drawImage(c, x - r - 5, y - r - 5, s, s);
+}
+// a note: a wool bead threaded on its warp thread; a mixed colour is two beads tied together across their threads
+function drawNote(n, y, s, count) {
+  const bw = Math.min(56, (W - 20) / NL * .72) * s, bh = 26 * s;
+  if (n.lanes.length === 2) {
+    const [l1, l2] = n.lanes, x1 = laneX(l1, y), x2 = laneX(l2, y), c1 = ORDER[l1], c2 = ORDER[l2];
+    g.save(); g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 5;
+    rr(x1, y - bh * .22, x2 - x1, bh * .44, bh * .22, YARN[n.col], 'rgba(255,248,230,.55)', 1); g.restore();
+    g.save(); g.beginPath(); g.rect(x1, y - bh * .22, x2 - x1, bh * .44); g.clip(); g.strokeStyle = 'rgba(255,248,230,.35)'; g.lineWidth = Math.max(1, bh * .08);
+    for (let i = x1 - bh; i < x2 + bh; i += bh * .35) { g.beginPath(); g.moveTo(i, y + bh * .22); g.lineTo(i + bh * .3, y - bh * .22); g.stroke(); } g.restore();
+    bead(x1, y, bw * .8, bh, c1); bead(x2, y, bw * .8, bh, c2);
+    label((x1 + x2) / 2, y, bh, n.col, count, true);
+    return;
+  }
+  bead(laneX(n.lanes[0], y), y, bw, bh, n.col);
+  if (count > 1) label(laneX(n.lanes[0], y), y, bh, n.col, count);
+}
+function label(x, y, h, col, count, pill) {
+  const f = Math.round(h * .55), txt = count > 1 ? '×' + count : '•'; g.font = f + 'px Bungee, sans-serif'; g.textAlign = 'center';
+  if (pill) { const w = g.measureText(txt).width + h * .6; rr(x - w / 2, y - h * .4, w, h * .8, h * .4, YARN[col], 'rgba(255,248,230,.7)', 1.2); }
+  g.fillStyle = LIGHT[col] ? '#2a1606' : '#f1e8d4'; g.fillText(txt, x, y + h * .2); g.textAlign = 'left';
+}
+// a skein of wool threaded on its warp thread
+function bead(x, y, w, h, col) {
+  g.save(); g.shadowColor = 'rgba(0,0,0,.5)'; g.shadowBlur = 6; rr(x - w / 2, y - h / 2, w, h, h / 2, shown(col), col === 'N' ? '#8a96d8' : 'rgba(255,248,230,.45)', 1.5); g.restore();
+  g.save(); g.beginPath(); g.rect(x - w / 2 + h / 4, y - h / 2, w - h / 2, h); g.clip();
+  g.strokeStyle = LIGHT[col] ? 'rgba(120,90,50,.25)' : 'rgba(255,248,230,.28)'; g.lineWidth = Math.max(1, h * .1);
+  for (let i = -w; i < w; i += h * .45) { g.beginPath(); g.moveTo(x + i, y + h / 2); g.lineTo(x + i + h * .6, y - h / 2); g.stroke(); }
+  g.restore();
+  g.strokeStyle = 'rgba(236,220,182,.6)'; g.lineWidth = 1.4; g.beginPath(); g.moveTo(x, y - h / 2 - 4); g.lineTo(x, y - h / 2 + 2); g.moveTo(x, y + h / 2 - 2); g.lineTo(x, y + h / 2 + 4); g.stroke();
+}
+// the strand behind a hold note, wound along its warp thread
+function tail(n, lane, u0, u1, dead) {
+  u0 = clamp(u0, -.25, 1); u1 = clamp(u1, -.25, 1); if (u1 <= u0) return;
+  const y0 = lerp(hitY, hwTop, u0), y1 = lerp(hitY, hwTop, u1), w0 = Math.min(23, (W - 20) / NL * .3) * lerp(1, .5, clamp(u0, 0, 1)), w1 = Math.min(23, (W - 20) / NL * .3) * lerp(1, .5, u1);
+  const x0 = laneX(lane, y0), x1 = laneX(lane, y1);
+  g.globalAlpha = dead ? .25 : 1;
+  fillP(g, [[x0 - w0 / 2, y0], [x0 + w0 / 2, y0], [x1 + w1 / 2, y1], [x1 - w1 / 2, y1]], shown(n.col));
+  g.save(); g.beginPath(); g.moveTo(x0 - w0 / 2, y0); g.lineTo(x0 + w0 / 2, y0); g.lineTo(x1 + w1 / 2, y1); g.lineTo(x1 - w1 / 2, y1); g.closePath(); g.clip();
+  g.strokeStyle = LIGHT[n.col] ? 'rgba(120,90,50,.3)' : 'rgba(255,248,230,.3)'; g.lineWidth = 1.5;
+  const off = (t * 40) % 8; for (let y = y1 - 8 + off; y < y0 + 8; y += 8) { const xx = laneX(lane, y); g.beginPath(); g.moveTo(xx - 12, y + 5); g.lineTo(xx + 12, y - 5); g.stroke(); }
+  g.restore(); g.globalAlpha = 1;
+}
+// the banners: auto weaving, are you ready, 3-2-1
+function drawCues() {
+  if (phase !== 'play') return;
+  let cue = null; for (const c of cues) if (c.time <= t) cue = c; else break;
+  if (!cue) return;
+  const cy = (hwTop + hitY) / 2 - 20, age = t - cue.time;
+  g.textAlign = 'center';
+  if (cue.kind === 'auto') {
+    const a = .65 + .35 * Math.sin(performance.now() / 300);
+    rr(W / 2 - 104, cy - 22, 208, 36, 18, 'rgba(12,16,32,.85)', 'rgba(255,207,90,.5)', 1.5);
+    g.globalAlpha = a; g.font = '14px Bungee, sans-serif'; g.fillStyle = C.gold; g.fillText('AUTO WEAVING', W / 2, cy + 2); g.globalAlpha = 1;
+    const sx = W / 2 + Math.sin(performance.now() / 260) * 90; fillP(g, [[sx - 13, cy + 26], [sx, cy + 22], [sx + 13, cy + 26], [sx, cy + 30]], '#c98a4a');
+  } else if (cue.kind === 'ready') {
+    const k = Math.min(1, age * 3);
+    g.globalAlpha = k; rr(20, cy - 36, W - 40, cue.faster ? 72 : 50, 14, 'rgba(12,16,32,.92)', 'rgba(255,207,90,.6)', 1.5);
+    g.font = '14px Bungee, sans-serif'; g.fillStyle = C.gold; g.fillText('ARE YOU READY TO TAKE OVER?', W / 2, cy - 6);
+    if (cue.faster) { g.font = '13px Rubik, sans-serif'; g.fillStyle = C.fg; g.fillText("It's gonna be a little bit faster this time", W / 2, cy + 20); }
+    g.globalAlpha = 1;
+  } else if (cue.kind === 'count') {
+    const k = clamp(age / .5, 0, 1), sc = 1.5 - .5 * k;
+    g.globalAlpha = 1 - k * .5; g.font = Math.round(64 * sc) + 'px Bungee, sans-serif'; g.fillStyle = '#3a1410'; g.fillText(String(cue.n), W / 2, cy + 30); g.fillStyle = C.gold; g.fillText(String(cue.n), W / 2, cy + 26); g.globalAlpha = 1;
+  } else if (cue.kind === 'go' && t < cue.until) {
+    g.globalAlpha = Math.max(0, 1 - age); g.font = '30px Bungee, sans-serif'; g.fillStyle = C.gold; g.fillText('WEAVE!', W / 2, cy + 12); g.globalAlpha = 1;
+  }
+  g.textAlign = 'left';
+  while (cues.length > 2 && cues[1].time <= t - 2) cues.shift();
+}
+
+window.__game = {
+  get s() { return { bpm: gen.bpm, holding: !!holding, t: +t.toFixed(2), phase, quality, combo, best, focus, gulsDone, notes: notes.length, row: gen.row, score: Shell.score, woven }; },
+  next() { const n = notes.find(m => !m.judged); return n ? { lanes: n.lanes, dt: n.time - t, hold: n.hold, dur: n.dur } : null; },
+  press, lift, runsOf, spanOf, TEST, CP, knotAt: (x, r) => (knots.get(r) || [])[x] || null,
+};
+Shell.run(G);
+})();
+
+</script>

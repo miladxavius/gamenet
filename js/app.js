@@ -57,6 +57,14 @@ const GAMES = [
     create: createBaran,
     thumb: drawBaranThumb,
   },
+  {
+    id: 'nagys',
+    title: 'Nagyş',
+    rtl: false,
+    blurb: 'Weave an endless Turkmen carpet to the dutar. Tap each yarn on the beat, hold the long runs, and press two yarns together for the mixed colours. Every gul has its own tune.',
+    create: createNagys,
+    thumb: drawNagysThumb,
+  },
 ];
 
 const $ = id => document.getElementById(id);
