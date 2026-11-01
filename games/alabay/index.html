@@ -50,7 +50,7 @@ button:focus-visible { outline: 2px solid var(--saffron); outline-offset: 2px; }
 <div class="app">
   <div class="hud">
     <div>Score<b id="score">0</b></div>
-    <div class="mid" id="midBox">Flock<b id="mid">–</b></div>
+    <div class="mid" id="midBox">Sheep<b id="mid">–</b></div>
     <div class="right"><div style="text-align:right">Best<b id="best">0</b></div><button id="sound" type="button" aria-label="Sound"></button><button id="pause" type="button">Pause</button></div>
   </div>
   <div id="stage">
@@ -626,13 +626,13 @@ const BARK_MP3 = 'data:audio/mpeg;base64,SUQzBAAAAAAtTVRTU0UAAAAPAAADTGF2ZjYwLjE
 // Wolves creep in from the dark (mostly glowing eyes). They keep clear of the dog and go for stragglers and lambs.
 // TAP anywhere to BARK (once every 3 seconds): it sends every wolf nearby running, but it also scatters the sheep close to the dog. Running into a wolf scares it too,
 // and a wolf with a sheep in its jaws drops it if you catch it before it reaches the edge.
-// PRESS AND HOLD (without moving) to CALL: the whole flock runs to the dog for a moment. Once every 10 seconds.
+// PRESS AND HOLD (without moving) to CALL: the whole flock runs to the dog for a moment. Once every 6 seconds.
 // Lambs are born all night. At dawn the flock earns a bonus and the next night brings more wolves, and packs.
-// Lose more than 5% of the flock in one night and the run ends: the shepherd comes out at dawn and is furious with the dog.
+// Lose more than 10% of the sheep in one night and the run ends: the shepherd comes out at dawn and is furious with the dog.
 (() => {
-const NIGHT_LEN = 70, DAWN_LEN = 4.5, DOG_V = 235, BARK_R = 185, SCATTER_R = 115, BARK_CD = 3, CALL_CD = 10, CALL_T = 2.6, HOLD_T = .45, LOSS_LIMIT = .05, MAX_FLOCK = 90;
+const NIGHT_LEN = 70, DAWN_LEN = 4.5, DOG_V = 235, BARK_R = 185, SCATTER_R = 115, BARK_CD = 1.5, CALL_CD = 6, CALL_T = 2.6, HOLD_T = .45, LOSS_LIMIT = .1, MAX_FLOCK = 90;
 const SIDES = ['NORTH', 'EAST', 'SOUTH', 'WEST'];
-const STRIP = 40;
+const STRIP = 52;
 let FH, readyFlash = { BARK: 0, CALL: 0 }, callCD = 0, callT = 0, callFx = 0, press = null, W, H, top, camp, groundC, darkC, darkG, yurt, herder, flockStart, lostTonight, lambsTonight;
 let sheep, wolves, dog, joy, keys, night, nightT, phase, phaseT, barkCD, rings, slow, shake, spawnT, birthT, packT, warn, stats, tut;
 
@@ -1030,7 +1030,7 @@ function stepWolves(dt) {
     if (sp > 8) { const a = Math.atan2(w.vy, w.vx); let d = a - w.a; d = Math.atan2(Math.sin(d), Math.cos(d)); w.a += d * Math.min(1, 8 * dt); }
   }
 }
-// more than 5% of tonight's flock (sheep at dusk plus lambs born since) lost = the run is over
+// more than 10% of tonight's flock (sheep at dusk plus lambs born since) lost = the run is over
 function allowed() { return Math.floor(LOSS_LIMIT * (flockStart + lambsTonight)); }
 function caught() {
   phase = 'caught'; phaseT = 0; warn = null; joy = null; keys = {}; dog.vx = dog.vy = 0; dog.sad = 0;
@@ -1060,7 +1060,7 @@ function stepCaught(dt) {
   }
 }
 function lose() {
-  Shell.over('The shepherd is angry!', 'Guard again', () => `<p class="muted">You lost ${lostTonight} sheep on night ${night}. The limit was ${allowed()} (5% of the flock).</p><p class="muted">Nights ${night - 1} survived · Lambs born ${stats.lambs} · Wolves chased ${stats.chased} · Saved ${stats.saved}</p><p class="muted" style="font-size:10px;opacity:.7">Bark recording: Amada44, Wikimedia Commons, CC BY-SA 3.0</p>`);
+  Shell.over('The shepherd is angry!', 'Guard again', () => `<p class="muted">You lost ${lostTonight} sheep on night ${night}. The limit was ${allowed()} (10% of your sheep).</p><p class="muted">Nights ${night - 1} survived · Lambs born ${stats.lambs} · Wolves chased ${stats.chased} · Saved ${stats.saved}</p>`);
 }
 function drawHerder(h) {
   if (!h || (h.st === 'walk' && phaseT < .9)) return;
@@ -1198,7 +1198,7 @@ function drawUI() {
   g.textAlign = 'right'; g.fillStyle = phase === 'dawn' ? C.gold : C.muted; g.fillText('DAWN', bx + bw, by + bh + 12);
   // moon riding the bar
   const mx = bx + bw * Math.min(1, p); dotC(g, mx, by + bh / 2, 7, '#f6ecd0'); dotC(g, mx + 3, by + bh / 2 - 2, 5.5, phase === 'dawn' ? C.gold : '#2c3a80');
-  // losses tonight against the 5% limit
+  // losses tonight against the 10% limit
   if (phase !== 'caught') {
     const lim = allowed(), edge = lostTonight >= lim;
     g.textAlign = 'center'; g.fillStyle = edge ? '#ff8a6a' : C.muted; g.fillText('LOST ' + lostTonight + ' / MAX ' + lim, W / 2, by + bh + 12);
@@ -1206,24 +1206,26 @@ function drawUI() {
   // call: rings that close in on the dog; while a finger holds still, a ring fills under it
   if (callFx > 0) for (let k = 0; k < 3; k++) { const q = (callFx / .9 + k / 3) % 1; g.strokeStyle = `rgba(191,232,160,${.6 * (1 - q) * callFx})`; g.lineWidth = 3; g.beginPath(); g.arc(dog.x, dog.y, 40 + q * 220, 0, 7); g.stroke(); }
   if (press && !press.used && phase !== 'caught') { const q = clamp((Shell.time - press.t - .1) / (HOLD_T - .1), 0, 1); if (q > 0) { g.strokeStyle = callCD > 0 ? 'rgba(166,171,207,.6)' : 'rgba(191,232,160,.9)'; g.lineWidth = 4; g.beginPath(); g.arc(press.x, press.y, 26, -Math.PI / 2, -Math.PI / 2 + 6.283 * q); g.stroke(); } }
-  // the cooldown strip under the field: two woven meters, BARK and CALL
+  // the cooldown strip under the field: two round gauges, BARK and CALL
   {
-    const y0 = H, sh = FH - H;
+    const y0 = H, sh = FH - H, cy = y0 + 3 + (sh - 3) / 2, r = 17;
     g.fillStyle = '#120e22'; g.fillRect(0, y0, W, sh); g.fillStyle = C.band; g.fillRect(0, y0, W, 3);
     for (let x = 8; x < W; x += 14) dia(x, y0 + 1.5, 1.6, (x / 14 | 0) % 2 ? C.orange : C.cream);
-    const meter = (x, w, label, cd, max, col, hint) => {
-      const ready = cd <= 0, q = ready ? 1 : 1 - cd / max, my = y0 + 13, mh = 16;
-      g.font = '11px Bungee, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillStyle = ready ? col : C.muted; g.fillText(label, x, my + mh / 2 + 1);
-      const lx = x + 50, lw = w - 50;
-      rr(lx, my, lw, mh, 8, '#1c1838', 'rgba(166,171,207,.25)', 1);
-      if (q > .02) rr(lx, my, Math.max(mh, lw * q), mh, 8, ready ? col : 'rgba(166,171,207,.35)');
-      g.font = '10px Bungee, sans-serif'; g.textAlign = 'center'; g.fillStyle = ready ? '#1a1020' : C.fg;
-      g.fillText(ready ? 'READY · ' + hint : Math.ceil(cd) + 's', lx + lw / 2, my + mh / 2 + 1);
-      if (ready && readyFlash[label] > 0) { g.strokeStyle = `rgba(255,255,255,${readyFlash[label] * 1.6})`; g.lineWidth = 2; rr(lx - 2, my - 2, lw + 4, mh + 4, 10, null, `rgba(255,255,255,${readyFlash[label] * 1.6})`, 2); }
+    const gauge = (cx, label, hint, cd, max, col) => {
+      const ready = cd <= 0, q = ready ? 1 : 1 - cd / max, fl = readyFlash[label];
+      dotC(g, cx, cy, r + 3, ready ? col : '#2a2446');
+      dotC(g, cx, cy, r, '#1c1838');
+      g.strokeStyle = ready ? col : 'rgba(241,232,212,.75)'; g.lineWidth = 4; g.lineCap = 'round';
+      g.beginPath(); g.arc(cx, cy, r - 4, -Math.PI / 2, -Math.PI / 2 + 6.283 * q); g.stroke(); g.lineCap = 'butt';
+      if (fl > 0) { g.strokeStyle = `rgba(255,255,255,${fl * 1.6})`; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, r + 4 + (1 - fl * 2) * 8, 0, 7); g.stroke(); }
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      if (ready) { g.strokeStyle = col; g.lineWidth = 3; g.lineCap = 'round'; g.beginPath(); g.moveTo(cx - 6, cy); g.lineTo(cx - 1.5, cy + 5); g.lineTo(cx + 7, cy - 5); g.stroke(); g.lineCap = 'butt'; }
+      else { g.font = '11px Bungee, sans-serif'; g.fillStyle = C.fg; g.fillText(cd < 1 ? cd.toFixed(1) : String(Math.ceil(cd)), cx, cy + 1); }
+      g.textAlign = 'left'; g.font = '12px Bungee, sans-serif'; g.fillStyle = ready ? col : C.muted; g.fillText(label, cx + r + 10, cy - 6);
+      g.font = '9px Bungee, sans-serif'; g.fillStyle = C.muted; g.fillText(hint, cx + r + 10, cy + 8);
     };
-    const half = (W - 36) / 2;
-    meter(12, half, 'BARK', barkCD, BARK_CD, C.gold, 'TAP');
-    meter(24 + half, half, 'CALL', callCD, CALL_CD, '#bfe8a0', 'HOLD');
+    gauge(34, 'BARK', 'TAP', barkCD, BARK_CD, C.gold);
+    gauge(W / 2 + 22, 'CALL', 'HOLD', callCD, CALL_CD, '#bfe8a0');
     g.textBaseline = 'alphabetic';
   }
   // joystick
@@ -1247,9 +1249,9 @@ function drawUI() {
     rr(16, top + 34, W - 32, 100, 12, 'rgba(12,16,32,.92)', '#4a2a2e', 1.5);
     g.font = '12px Rubik, sans-serif'; g.textAlign = 'center'; g.fillStyle = C.fg;
     g.fillText('Drag anywhere to run the Alabaý. The sheep follow.', W / 2, top + 56);
-    g.fillStyle = C.gold; g.fillText('Tap to BARK (every 3 s): it scares wolves… and sheep.', W / 2, top + 74);
-    g.fillStyle = '#bfe8a0'; g.fillText('Press and hold to CALL the flock to you (every 10 s).', W / 2, top + 92);
-    g.fillStyle = '#ff9a80'; g.fillText('Lose over 5% of the flock in a night and', W / 2, top + 110); g.fillText('the shepherd will be very angry.', W / 2, top + 125);
+    g.fillStyle = C.gold; g.fillText('Tap to BARK (every 1.5 s): it scares wolves… and sheep.', W / 2, top + 74);
+    g.fillStyle = '#bfe8a0'; g.fillText('Press and hold to CALL the sheep to you (every 6 s).', W / 2, top + 92);
+    g.fillStyle = '#ff9a80'; g.fillText('Lose over 10% of your sheep in a night and', W / 2, top + 110); g.fillText('the shepherd will be very angry.', W / 2, top + 125);
     g.globalAlpha = 1;
   }
 }

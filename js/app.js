@@ -93,7 +93,7 @@ const GAMES = [
     id: 'alabay',
     title: 'Alabaý',
     rtl: false,
-    blurb: 'Guard the flock through desert nights as a giant Turkmen shepherd dog. Drag to run, tap to bark the wolves away, hold to call the sheep. Lose more than 5% of the flock in a night and the shepherd will be furious.',
+    blurb: 'A desert night, a sleepy flock and hungry wolves in the dark. You are the Alabaý, the giant Turkmen shepherd dog.',
     create: createAlabay,
     thumb: drawAlabayThumb,
   },
