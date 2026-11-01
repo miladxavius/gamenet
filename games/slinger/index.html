@@ -615,19 +615,21 @@ function dutar(f, dur, o = {}) { SND.pluck(f, dur, Object.assign({ bright: .4, d
 <script>
 // YARN SLINGER: the loom keeps lowering a half-woven carpet toward the floor.
 // Drag to aim and let go to sling a yarn ball; it sticks as a gul of its tribe. Join 3+ of one tribe to unpick them.
-// Anything left hanging by nothing drops off for a bonus. Every few shots the loom weaves a new row at the top and the
-// carpet comes down one row. If the fringe reaches the floor line the run is over.
+// Anything left hanging by nothing drops off for a bonus. The loom weaves a new row at the top (bringing the carpet down
+// one row) on a clock and after every few shots that unpick nothing. If the fringe reaches the floor line the run is over.
+// It gets harder as the run goes on: the clock speeds up, fewer misses are allowed, a fourth and fifth tribe join,
+// new rows have fewer ready-made matches, and some yarn balls come in a tribe that is not on the loom.
 (() => {
 const COLS = 9;
 let W, H, s, fx, fy, fw, floorY, sx, sy;
-let misses = 0, grid, cur, next, ball, aim, aiming, shots, perLower, lowered, combo, falling, popping, lowerAnim, clock;
+let misses = 0, grid, cur, next, ball, aim, aiming, shots, perLower, lowered, combo, falling, popping, lowerAnim, clock, weaveT, tribesOn;
 
 const G = {
   id: 'slinger',
   resize(w, h) { W = w; H = h; fx = 24; fw = W - 48; s = fw / COLS; fy = 24 + 26; floorY = H - 128; sx = W / 2; sy = H - 62; },
   init(w, h) {
     G.resize(w, h);
-    lowered = 0; misses = 0;
+    lowered = 0; misses = 0; weaveT = 0; tribesOn = 3;
     grid = []; for (let i = 0; i < 5; i++) grid.push(makeRow(i));
     shots = 0; perLower = 5; combo = 0; falling = []; popping = []; lowerAnim = 0; clock = 0; ball = null; aim = -Math.PI / 2; aiming = false;
     cur = pickBall(); next = pickBall();
@@ -635,6 +637,10 @@ const G = {
   },
   update(dt) {
     clock += dt; lowerAnim = Math.max(0, lowerAnim - dt * 4);
+    // the loom's clock: a new row every weaveEvery() seconds, faster as the run goes on
+    weaveT += dt; if (weaveT >= weaveEvery()) { weaveT = 0; lower(); checkLose(); if (Shell.state !== 'play') return; }
+    const want = Shell.time > 150 ? 5 : Shell.time > 60 ? 4 : 3;
+    if (want > tribesOn) { tribesOn = want; Shell.toast('A new tribe joins: ' + T[K[want - 1]].name); }
     falling.forEach(f => { f.vy += 900 * dt; f.y += f.vy * dt; f.x += f.vx * dt; f.a += f.va * dt; }); falling = falling.filter(f => f.y < H + 40);
     popping.forEach(p => p.t += dt); popping = popping.filter(p => p.t < .35);
     if (ball) {
@@ -683,13 +689,19 @@ function place(cc, rr0, [hc, hr]) {
   stick(cc, rr0);
 }
 function setAim(x, y) { aim = clamp(Math.atan2(Math.min(y, sy - 10) - sy, x - sx), -Math.PI + .2, -.2); }
-function makeRow(seed) {
-  const row = []; const present = K.slice(0, 3 + Math.min(2, Math.floor(lowered / 6)));
-  for (let c = 0; c < COLS; c++) row.push(c > 0 && Math.random() < .45 ? row[c - 1] : pick(present));
+// how far into the run we are, 0 at the start and 1 after about five minutes
+const lvl = () => Math.min(1, (Shell.time || 0) / 300);
+const weaveEvery = () => Math.max(3.5, 14 - (Shell.time || 0) * .03);   // 14 s at the start, 5 s at five minutes, 3.5 s from about six minutes
+function makeRow() {
+  // early rows have long runs of one tribe (easy matches); later rows are more mixed
+  const row = [], present = K.slice(0, tribesOn || 3), same = lerp(.45, .15, lvl());
+  for (let c = 0; c < COLS; c++) row.push(c > 0 && Math.random() < same ? row[c - 1] : pick(present));
   return row;
 }
 function pickBall() {
   const on = new Set(); grid.forEach(r => r.forEach(k => k && on.add(k)));
+  // later on, some balls are a tribe that is not on the loom at all
+  if (on.size && Math.random() < lerp(0, .2, lvl())) { const off = K.slice(0, tribesOn).filter(k => !on.has(k)); if (off.length) return pick(off); }
   const list = on.size ? [...on] : K.slice(0, 3); return pick(list);
 }
 function swap() { if (ball) return; [cur, next] = [next, cur]; SND.tone(660, .1, { vol: .04 }); }
@@ -724,11 +736,11 @@ function dropLoose() {
   let n = 0;
   grid.forEach((row, y) => row.forEach((k, x) => { if (k && !keep.has(x + ',' + y)) { falling.push({ k, x: fx + x * s, y: fy + y * s, vx: rand(-60, 60), vy: rand(-80, 0), a: 0, va: rand(-4, 4) }); row[x] = null; n++; } }));
   if (n) { const pts = n * 25; Shell.add(pts); Shell.toast('Dropped ' + n + ' +' + pts); SND.noise(.4, { filter: 'lowpass', freq: 400, to: 150, vol: .08 }); }
-  if (grid.every(r => r.every(k => !k))) { Shell.add(500); Shell.toast('Loom cleared! +500'); grid = [makeRow(), makeRow()]; [0, 2, 4, 7, 9].forEach((m, i) => dutar(SND.note(A3, MODE, m), .9, { vol: .07, at: i * .07 })); }
+  if (grid.every(r => r.every(k => !k))) { Shell.add(500); Shell.toast('Loom cleared! +500'); grid = []; for (let i = 0, n = 2 + Math.round(lvl() * 3); i < n; i++) grid.push(makeRow()); [0, 2, 4, 7, 9].forEach((m, i) => dutar(SND.note(A3, MODE, m), .9, { vol: .07, at: i * .07 })); }
 }
 function lower() {
-  grid.unshift(makeRow()); lowered++; lowerAnim = 1; Shell.setMid(String(lowered));
-  perLower = Math.max(3, 5 - Math.floor(lowered / 10)); misses = 0;
+  grid.unshift(makeRow()); lowered++; lowerAnim = 1; Shell.setMid(String(lowered)); weaveT = 0;
+  perLower = Math.round(lerp(5, 2, lvl())); misses = 0;
   SND.tone(90, .4, { to: 70, vol: .1 }); SND.noise(.3, { filter: 'lowpass', freq: 300, vol: .06 });
 }
 function trim() { while (grid.length && grid[grid.length - 1].every(k => !k)) grid.pop(); }
@@ -755,6 +767,9 @@ function draw() {
   warp(fx + 3, fx + fw, fy, H - 24, s / 3, .1);
   // beam
   const bgr = g.createLinearGradient(0, fy - 26, 0, fy); bgr.addColorStop(0, '#6a4426'); bgr.addColorStop(.5, '#8d5d34'); bgr.addColorStop(1, '#4a2e18'); g.fillStyle = bgr; g.fillRect(fx, fy - 26, fw, 26);
+  // the shuttle runs along the beam: when it reaches the end, a new row is woven
+  const wp = clamp(weaveT / weaveEvery(), 0, 1); g.fillStyle = 'rgba(12,8,20,.45)'; g.fillRect(fx + 6, fy - 9, fw - 12, 4); g.fillStyle = wp > .8 ? `rgba(255,120,90,${.7 + .3 * Math.sin(clock * 12)})` : C.saffron; g.fillRect(fx + 6, fy - 9, (fw - 12) * wp, 4);
+  dotC(g, fx + 6 + (fw - 12) * wp, fy - 7, 4, C.cream);
   // carpet (slides down when the loom lowers)
   const off = -ease(lowerAnim) * s;
   g.save(); g.beginPath(); g.rect(fx, fy, fw, H); g.clip();

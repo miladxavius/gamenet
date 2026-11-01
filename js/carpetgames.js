@@ -40,5 +40,5 @@ function carpetFrameThumb(id) {
   };
 }
 const createGumly = carpetFrameGame('gumly', 1), drawGumlyThumb = carpetFrameThumb('gumly');         // carpets on the line at night
-const createSlinger = carpetFrameGame('slinger', 1), drawSlingerThumb = carpetFrameThumb('slinger'); // a loom and a yarn sling
+const createSlinger = carpetFrameGame('slinger', 2), drawSlingerThumb = carpetFrameThumb('slinger'); // a loom and a yarn sling
 const createKerwen = carpetFrameGame('kerwen', 1), drawKerwenThumb = carpetFrameThumb('kerwen');     // a camel caravan on a carpet
