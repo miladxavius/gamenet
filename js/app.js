@@ -89,6 +89,14 @@ const GAMES = [
     create: createKerwen,
     thumb: drawKerwenThumb,
   },
+  {
+    id: 'alabay',
+    title: 'Alabaý',
+    rtl: false,
+    blurb: 'Guard the flock through desert nights as a giant Turkmen shepherd dog. Drag to run, tap to bark the wolves away, hold to call the sheep. Lose more than 5% of the flock in a night and the shepherd will be furious.',
+    create: createAlabay,
+    thumb: drawAlabayThumb,
+  },
 ];
 
 const $ = id => document.getElementById(id);

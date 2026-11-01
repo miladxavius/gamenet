@@ -1,4 +1,4 @@
-// Gumly Gelin, Yarn Slinger and Kerwen: three endless carpet games, each in its own page (games/<id>/) shown in a
+// Gumly Gelin, Yarn Slinger, Kerwen and Alabaý: endless games, each in its own page (games/<id>/) shown in a
 // frame on the stage, like Nagyş. A page reports its score by message; whatever it reached is saved when the round
 // ends or the player leaves.
 function carpetFrameGame(id, ver) {
@@ -42,3 +42,4 @@ function carpetFrameThumb(id) {
 const createGumly = carpetFrameGame('gumly', 1), drawGumlyThumb = carpetFrameThumb('gumly');         // carpets on the line at night
 const createSlinger = carpetFrameGame('slinger', 2), drawSlingerThumb = carpetFrameThumb('slinger'); // a loom and a yarn sling
 const createKerwen = carpetFrameGame('kerwen', 1), drawKerwenThumb = carpetFrameThumb('kerwen');     // a camel caravan on a carpet
+const createAlabay = carpetFrameGame('alabay', 1), drawAlabayThumb = carpetFrameThumb('alabay');     // the shepherd dog barking at wolves
